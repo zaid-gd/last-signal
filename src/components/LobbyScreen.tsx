@@ -47,7 +47,9 @@ export default function LobbyScreen() {
           <button
             onClick={() => {
               setError('');
-              void createRoom().catch(() => {});
+              void createRoom().catch((err: Error) => {
+                setError(err.message);
+              });
             }}
             className="w-64 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition"
           >

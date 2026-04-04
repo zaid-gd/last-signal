@@ -1,33 +1,32 @@
 import { create } from 'zustand';
-import Peer from 'peerjs';
+import { P2PConnection, WebRTCDataConnection } from '../signaling/P2PConnection';
+import { Signaling } from '../signaling/FirestoreSignaling';
 
 interface ConnectionStore {
-  peer: Peer | null;
+  peer: P2PConnection | null;
+  roomId: string | null;
   peerId: string | null;
   fullPeerId: string | null;
   partnerPeerId: string | null;
   connectionState: 'idle' | 'waiting' | 'connected';
   role: 'astronaut' | 'missionControl' | null;
-  conn: any | null;
+  conn: WebRTCDataConnection | null;
   setConnectionState: (state: 'idle' | 'waiting' | 'connected') => void;
   setRole: (role: 'astronaut' | 'missionControl') => void;
-  setConn: (conn: any) => void;
+  setConn: (conn: WebRTCDataConnection | null) => void;
   createRoom: () => Promise<void>;
   joinRoom: (roomCode: string) => Promise<void>;
 }
 
-const PEER_OPTIONS = {
-  host: '0.peerjs.com',
-  port: 443,
-  path: '/peerjs',
-};
-
-function createPeerInstance() {
-  return new Peer(PEER_OPTIONS);
+function cleanupConnection(store: ConnectionStore) {
+  if (store.peer) {
+    store.peer.close();
+  }
 }
 
 export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   peer: null,
+  roomId: null,
   peerId: null,
   fullPeerId: null,
   partnerPeerId: null,
@@ -37,44 +36,66 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   setConnectionState: (state) => set({ connectionState: state }),
   setRole: (role) => set({ role }),
   setConn: (conn) => set({ conn }),
-  createRoom: async () => await new Promise<void>((resolve, reject) => {
-    const peer = createPeerInstance();
+  createRoom: async () => {
+    cleanupConnection(get());
 
-    peer.on('open', (id) => {
-      console.log('Peer created:', id);
+    try {
+      const { roomId, myId } = await Signaling.createRoom();
+      const peer = new P2PConnection();
+
+      peer.onDataConnection = (conn) => {
+        set({ conn });
+      };
+
+      peer.onConnectionOpen = () => {
+        set({ connectionState: 'connected' });
+        void Signaling.markConnected(roomId);
+      };
+
+      peer.pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          void Signaling.addIceCandidate(roomId, 'host', event.candidate.toJSON());
+        }
+      };
+
       set({
         peer,
-        peerId: id,
-        fullPeerId: id,
+        roomId,
+        peerId: roomId,
+        fullPeerId: myId,
         partnerPeerId: null,
         conn: null,
         connectionState: 'waiting',
       });
-      resolve();
-    });
 
-    peer.on('connection', (conn) => {
-      set({
-        conn,
-        partnerPeerId: conn.peer,
-        connectionState: 'connected',
+      const offer = await peer.createOffer();
+      await Signaling.setOffer(roomId, offer);
+
+      Signaling.onRoomUpdate(roomId, (state) => {
+        if (!state) {
+          return;
+        }
+
+        if (state.joinerId) {
+          set({ partnerPeerId: state.joinerId });
+        }
+
+        if (state.answer && !peer.pc.currentRemoteDescription) {
+          void peer.handleAnswer(state.answer);
+        }
+
+        for (const candidate of state.joinerCandidates ?? []) {
+          void peer.addIceCandidate(candidate);
+        }
       });
-
-      conn.on('data', (data) => {
-        console.log('Received:', data);
-      });
-    });
-
-    peer.on('error', (err) => {
-      console.error('Peer error:', err);
+    } catch (err) {
+      console.error('Create room error:', err);
       if (typeof window !== 'undefined') {
-        window.alert('Failed to connect to PeerJS. Try refreshing.');
+        window.alert('Failed to create room. Check your Firebase config.');
       }
-      reject(err);
-    });
-
-    set({ peer });
-  }),
+      throw err instanceof Error ? err : new Error('Failed to create room.');
+    }
+  },
   joinRoom: async (roomCode) => {
     const normalizedRoomCode = roomCode.trim().toLowerCase();
 
@@ -82,63 +103,57 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
       throw new Error('Please enter a room ID');
     }
 
-    const connectWithPeer = (peer: Peer) => new Promise<void>((resolve, reject) => {
-      const conn = peer.connect(normalizedRoomCode);
+    cleanupConnection(get());
 
-      conn.on('open', () => {
-        console.log('Connected to', normalizedRoomCode);
-        set({
-          conn,
-          partnerPeerId: normalizedRoomCode,
-          connectionState: 'connected',
-        });
-        resolve();
+    try {
+      const myId = await Signaling.joinRoom(normalizedRoomCode);
+      const peer = new P2PConnection();
+
+      peer.onDataConnection = (conn) => {
+        set({ conn });
+      };
+
+      peer.onConnectionOpen = () => {
+        set({ connectionState: 'connected' });
+        void Signaling.markConnected(normalizedRoomCode);
+      };
+
+      peer.pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          void Signaling.addIceCandidate(normalizedRoomCode, 'joiner', event.candidate.toJSON());
+        }
+      };
+
+      set({
+        peer,
+        roomId: normalizedRoomCode,
+        peerId: normalizedRoomCode,
+        fullPeerId: myId,
+        partnerPeerId: null,
+        conn: null,
+        connectionState: 'waiting',
       });
 
-      conn.on('data', (data) => {
-        console.log('Received:', data);
+      Signaling.onRoomUpdate(normalizedRoomCode, (state) => {
+        if (!state) {
+          return;
+        }
+
+        set({ partnerPeerId: state.hostId });
+
+        if (state.offer && !peer.pc.currentRemoteDescription) {
+          void peer.handleOffer(state.offer).then((answer) => {
+            void Signaling.setAnswer(normalizedRoomCode, answer);
+          });
+        }
+
+        for (const candidate of state.hostCandidates ?? []) {
+          void peer.addIceCandidate(candidate);
+        }
       });
-
-      conn.on('error', (err) => {
-        console.error('Connection error:', err);
-        reject(new Error('Failed to connect. Check the room ID and try again.'));
-      });
-    });
-
-    const existingPeer = get().peer;
-
-    if (existingPeer?.open) {
-      await connectWithPeer(existingPeer);
-      return;
+    } catch (err) {
+      console.error('Join room error:', err);
+      throw err instanceof Error ? err : new Error('Failed to connect. Check the room ID and try again.');
     }
-
-    await new Promise<void>((resolve, reject) => {
-      const peer = createPeerInstance();
-
-      peer.on('open', async (id) => {
-        set({
-          peer,
-          peerId: id,
-          fullPeerId: id,
-        });
-
-        try {
-          await connectWithPeer(peer);
-          resolve();
-        } catch (error) {
-          reject(error);
-        }
-      });
-
-      peer.on('error', (err) => {
-        console.error('Peer error:', err);
-        if (typeof window !== 'undefined') {
-          window.alert('Failed to connect to PeerJS. Try refreshing.');
-        }
-        reject(err);
-      });
-
-      set({ peer });
-    });
   },
 }));
