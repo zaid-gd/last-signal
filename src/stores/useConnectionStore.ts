@@ -1,19 +1,18 @@
 import { create } from 'zustand';
-import { P2PConnection, WebRTCDataConnection } from '../signaling/P2PConnection';
-import { Signaling } from '../signaling/FirestoreSignaling';
+import { P2PManager } from '../network/P2PManager';
 
 interface ConnectionStore {
-  peer: P2PConnection | null;
+  peer: P2PManager | null;
   roomId: string | null;
   peerId: string | null;
   fullPeerId: string | null;
   partnerPeerId: string | null;
   connectionState: 'idle' | 'waiting' | 'connected';
   role: 'astronaut' | 'missionControl' | null;
-  conn: WebRTCDataConnection | null;
+  conn: ReturnType<P2PManager['getConnection']> | null;
   setConnectionState: (state: 'idle' | 'waiting' | 'connected') => void;
   setRole: (role: 'astronaut' | 'missionControl') => void;
-  setConn: (conn: WebRTCDataConnection | null) => void;
+  setConn: (conn: ReturnType<P2PManager['getConnection']> | null) => void;
   createRoom: () => Promise<void>;
   joinRoom: (roomCode: string) => Promise<void>;
 }
@@ -40,23 +39,17 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
     cleanupConnection(get());
 
     try {
-      const { roomId, myId } = await Signaling.createRoom();
-      const peer = new P2PConnection();
-
-      peer.onDataConnection = (conn) => {
-        set({ conn });
-      };
-
-      peer.onConnectionOpen = () => {
+      const peer = new P2PManager();
+      peer.onConnected = () => {
         set({ connectionState: 'connected' });
-        void Signaling.markConnected(roomId);
       };
-
-      peer.pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          void Signaling.addIceCandidate(roomId, 'host', event.candidate.toJSON());
+      peer.onRoomState = (state) => {
+        if (state.joinerId) {
+          set({ partnerPeerId: state.joinerId });
         }
       };
+
+      const { roomId, myId } = await peer.createRoom();
 
       set({
         peer,
@@ -64,30 +57,10 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
         peerId: roomId,
         fullPeerId: myId,
         partnerPeerId: null,
-        conn: null,
+        conn: peer.getConnection(),
         connectionState: 'waiting',
       });
 
-      const offer = await peer.createOffer();
-      await Signaling.setOffer(roomId, offer);
-
-      Signaling.onRoomUpdate(roomId, (state) => {
-        if (!state) {
-          return;
-        }
-
-        if (state.joinerId) {
-          set({ partnerPeerId: state.joinerId });
-        }
-
-        if (state.answer && !peer.pc.currentRemoteDescription) {
-          void peer.handleAnswer(state.answer);
-        }
-
-        for (const candidate of state.joinerCandidates ?? []) {
-          void peer.addIceCandidate(candidate);
-        }
-      });
     } catch (err) {
       console.error('Create room error:', err);
       if (typeof window !== 'undefined') {
@@ -106,23 +79,15 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
     cleanupConnection(get());
 
     try {
-      const myId = await Signaling.joinRoom(normalizedRoomCode);
-      const peer = new P2PConnection();
-
-      peer.onDataConnection = (conn) => {
-        set({ conn });
-      };
-
-      peer.onConnectionOpen = () => {
+      const peer = new P2PManager();
+      peer.onConnected = () => {
         set({ connectionState: 'connected' });
-        void Signaling.markConnected(normalizedRoomCode);
+      };
+      peer.onRoomState = (state) => {
+        set({ partnerPeerId: state.hostId });
       };
 
-      peer.pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          void Signaling.addIceCandidate(normalizedRoomCode, 'joiner', event.candidate.toJSON());
-        }
-      };
+      const { myId } = await peer.joinRoom(normalizedRoomCode);
 
       set({
         peer,
@@ -130,26 +95,8 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
         peerId: normalizedRoomCode,
         fullPeerId: myId,
         partnerPeerId: null,
-        conn: null,
+        conn: peer.getConnection(),
         connectionState: 'waiting',
-      });
-
-      Signaling.onRoomUpdate(normalizedRoomCode, (state) => {
-        if (!state) {
-          return;
-        }
-
-        set({ partnerPeerId: state.hostId });
-
-        if (state.offer && !peer.pc.currentRemoteDescription) {
-          void peer.handleOffer(state.offer).then((answer) => {
-            void Signaling.setAnswer(normalizedRoomCode, answer);
-          });
-        }
-
-        for (const candidate of state.hostCandidates ?? []) {
-          void peer.addIceCandidate(candidate);
-        }
       });
     } catch (err) {
       console.error('Join room error:', err);

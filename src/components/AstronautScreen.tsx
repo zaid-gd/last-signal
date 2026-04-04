@@ -15,15 +15,7 @@ export default function AstronautScreen() {
         const msg = typeof data === 'string' ? JSON.parse(data) : data;
 
         if (msg.type === 'chat') {
-          const delay = msg.sentAt + 10000 - Date.now();
-
-          if (delay > 0) {
-            setTimeout(() => {
-              addMessage({ ...msg, from: 'partner' });
-            }, delay);
-          } else {
-            addMessage({ ...msg, from: 'partner' });
-          }
+          addMessage({ ...msg, from: 'partner' });
         }
       } catch (e) {
         console.error('Failed to parse message:', e);
