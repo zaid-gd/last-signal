@@ -4,6 +4,16 @@ import { useGameStore } from '../stores/useGameStore';
 
 declare const Peer: any;
 
+const ROOM_CODE_LENGTH = 8;
+const ROOM_CODE_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+
+function generateRoomCode() {
+  return Array.from({ length: ROOM_CODE_LENGTH }, () => {
+    const index = Math.floor(Math.random() * ROOM_CODE_CHARS.length);
+    return ROOM_CODE_CHARS[index];
+  }).join('');
+}
+
 export default function LobbyScreen() {
   const [joinCode, setJoinCode] = useState('');
   const [showRoleSelector, setShowRoleSelector] = useState(false);
@@ -24,9 +34,10 @@ export default function LobbyScreen() {
 
   const { setPhase } = useGameStore();
 
-  const createRoom = () => {
+  const createRoom = (attempt = 0) => {
     setError('');
-    const newPeer = new Peer();
+    const roomCode = generateRoomCode();
+    const newPeer = new Peer(roomCode);
     setPeer(newPeer);
 
     newPeer.on('open', (id: string) => {
@@ -48,12 +59,18 @@ export default function LobbyScreen() {
 
     newPeer.on('error', (err: any) => {
       console.error('Peer error:', err);
+      if (err?.type === 'unavailable-id' && attempt < 3) {
+        createRoom(attempt + 1);
+        return;
+      }
       setError(`Error: ${err.type}`);
     });
   };
 
   const joinRoom = () => {
-    if (!joinCode.trim()) {
+    const normalizedRoomCode = joinCode.trim().toLowerCase();
+
+    if (!normalizedRoomCode) {
       setError('Please enter a room ID');
       return;
     }
@@ -64,11 +81,11 @@ export default function LobbyScreen() {
 
     newPeer.on('open', (myId: string) => {
       setFullPeerId(myId);
-      const conn = newPeer.connect(joinCode);
+      const conn = newPeer.connect(normalizedRoomCode);
       setConn(conn);
 
       conn.on('open', () => {
-        setPartnerPeerId(joinCode);
+        setPartnerPeerId(normalizedRoomCode);
         setConnectionState('connected');
         setShowRoleSelector(true);
       });
@@ -119,7 +136,7 @@ export default function LobbyScreen() {
       {connectionState === 'idle' && (
         <div className="space-y-8">
           <button
-            onClick={createRoom}
+            onClick={() => createRoom()}
             className="w-64 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition"
           >
             Create Room
@@ -131,7 +148,7 @@ export default function LobbyScreen() {
               <input
                 type="text"
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value)}
+                onChange={(e) => setJoinCode(e.target.value.toLowerCase())}
                 placeholder="Paste room ID here"
                 className="w-64 px-4 py-3 bg-gray-800 border border-gray-700 rounded text-center text-sm font-mono"
               />
