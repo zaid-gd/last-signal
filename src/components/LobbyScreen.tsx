@@ -2,106 +2,20 @@ import { useState } from 'react';
 import { useConnectionStore } from '../stores/useConnectionStore';
 import { useGameStore } from '../stores/useGameStore';
 
-declare const Peer: any;
-
-const PEER_OPTIONS = {
-  host: '0.peerjs.com',
-  port: 443,
-  path: '/peerjs',
-};
-
 export default function LobbyScreen() {
   const [joinCode, setJoinCode] = useState('');
-  const [showRoleSelector, setShowRoleSelector] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
   const {
     peerId,
     connectionState,
-    setPeerId,
-    setFullPeerId,
-    setPartnerPeerId,
-    setConnectionState,
-    setPeer,
-    setConn,
-    setRole
+    createRoom,
+    joinRoom,
+    setRole,
   } = useConnectionStore();
 
   const { setPhase } = useGameStore();
-
-  const createRoom = (attempt = 0) => {
-    setError('');
-    const newPeer = new Peer(undefined, PEER_OPTIONS);
-    setPeer(newPeer);
-
-    newPeer.on('open', (id: string) => {
-      setFullPeerId(id);
-      setPeerId(id);
-      setConnectionState('waiting');
-    });
-
-    newPeer.on('connection', (conn: any) => {
-      setConn(conn);
-      setPartnerPeerId(conn.peer);
-      setConnectionState('connected');
-      setShowRoleSelector(true);
-
-      conn.on('data', (data: any) => {
-        console.log('Received:', data);
-      });
-    });
-
-    newPeer.on('error', (err: any) => {
-      console.error('Peer error:', err);
-      if (err?.type === 'unavailable-id' && attempt < 3) {
-        createRoom(attempt + 1);
-        return;
-      }
-      setError(`Error: ${err.type}`);
-    });
-  };
-
-  const joinRoom = () => {
-    const normalizedRoomCode = joinCode.trim().toLowerCase();
-
-    if (!normalizedRoomCode) {
-      setError('Please enter a room ID');
-      return;
-    }
-
-    setError('');
-    const newPeer = new Peer(undefined, PEER_OPTIONS);
-    setPeer(newPeer);
-
-    newPeer.on('open', (myId: string) => {
-      setFullPeerId(myId);
-      const conn = newPeer.connect(normalizedRoomCode);
-      setConn(conn);
-
-      conn.on('open', () => {
-        setPartnerPeerId(normalizedRoomCode);
-        setConnectionState('connected');
-        setShowRoleSelector(true);
-      });
-
-      conn.on('error', (err: any) => {
-        console.error('Connection error:', err);
-        setError('Failed to connect. Check the room ID and try again.');
-        setConnectionState('idle');
-      });
-
-      conn.on('data', (data: any) => {
-        console.log('Received:', data);
-      });
-    });
-
-    newPeer.on('error', (err: any) => {
-      console.error('Peer error:', err);
-      setError(`Error: ${err.type}`);
-      setConnectionState('idle');
-    });
-  };
 
   const copyToClipboard = () => {
     if (peerId) {
@@ -131,7 +45,10 @@ export default function LobbyScreen() {
       {connectionState === 'idle' && (
         <div className="space-y-8">
           <button
-            onClick={() => createRoom()}
+            onClick={() => {
+              setError('');
+              void createRoom().catch(() => {});
+            }}
             className="w-64 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition"
           >
             Create Room
@@ -150,7 +67,12 @@ export default function LobbyScreen() {
                 className="w-64 px-4 py-3 bg-gray-800 border border-gray-700 rounded text-center text-sm font-mono"
               />
               <button
-                onClick={joinRoom}
+                onClick={() => {
+                  setError('');
+                  void joinRoom(joinCode).catch((err: Error) => {
+                    setError(err.message);
+                  });
+                }}
                 className="w-64 px-6 py-3 bg-green-600 hover:bg-green-700 rounded font-semibold transition"
               >
                 Join Room
@@ -176,7 +98,7 @@ export default function LobbyScreen() {
         </div>
       )}
 
-      {connectionState === 'connected' && showRoleSelector && (
+      {connectionState === 'connected' && (
         <div className="text-center">
           <p className="text-2xl mb-8">Connection Established!</p>
           <p className="text-xl mb-6">Select Your Role:</p>
