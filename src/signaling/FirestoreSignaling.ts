@@ -9,15 +9,14 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyCouJVHdG39SJ2kG2W6Nc8s5PinHBCv21Y",
-  authDomain: "last-signal-vibe-jam.firebaseapp.com",
-  projectId: "last-signal-vibe-jam",
-  storageBucket: "last-signal-vibe-jam.firebasestorage.app",
-  messagingSenderId: "493425829086",
-  appId: "1:493425829086:web:1f5b46404c40da33b18e4f",
-  measurementId: "G-CMD4KVXCMT"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 function ensureFirebaseConfig() {
