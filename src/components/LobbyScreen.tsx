@@ -6,7 +6,6 @@ declare const Peer: any;
 
 export default function LobbyScreen() {
   const [joinCode, setJoinCode] = useState('');
-  const [peer, setPeer] = useState<any>(null);
   const [showRoleSelector, setShowRoleSelector] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
@@ -18,6 +17,7 @@ export default function LobbyScreen() {
     setFullPeerId,
     setPartnerPeerId,
     setConnectionState,
+    setPeer,
     setConn,
     setRole
   } = useConnectionStore();

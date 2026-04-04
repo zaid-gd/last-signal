@@ -6,12 +6,14 @@ interface ConnectionStore {
   partnerPeerId: string | null;
   connectionState: 'idle' | 'waiting' | 'connected';
   role: 'astronaut' | 'missionControl' | null;
+  peer: any;
   conn: any;
   setPeerId: (id: string) => void;
   setFullPeerId: (id: string) => void;
   setPartnerPeerId: (id: string) => void;
   setConnectionState: (state: 'idle' | 'waiting' | 'connected') => void;
   setRole: (role: 'astronaut' | 'missionControl') => void;
+  setPeer: (peer: any) => void;
   setConn: (conn: any) => void;
 }
 
@@ -21,11 +23,13 @@ export const useConnectionStore = create<ConnectionStore>((set) => ({
   partnerPeerId: null,
   connectionState: 'idle',
   role: null,
+  peer: null,
   conn: null,
   setPeerId: (id) => set({ peerId: id }),
   setFullPeerId: (id) => set({ fullPeerId: id }),
   setPartnerPeerId: (id) => set({ partnerPeerId: id }),
   setConnectionState: (state) => set({ connectionState: state }),
   setRole: (role) => set({ role }),
+  setPeer: (peer) => set({ peer }),
   setConn: (conn) => set({ conn }),
 }));
