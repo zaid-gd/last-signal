@@ -4,15 +4,11 @@ import { useGameStore } from '../stores/useGameStore';
 
 declare const Peer: any;
 
-const ROOM_CODE_LENGTH = 8;
-const ROOM_CODE_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
-
-function generateRoomCode() {
-  return Array.from({ length: ROOM_CODE_LENGTH }, () => {
-    const index = Math.floor(Math.random() * ROOM_CODE_CHARS.length);
-    return ROOM_CODE_CHARS[index];
-  }).join('');
-}
+const PEER_OPTIONS = {
+  host: '0.peerjs.com',
+  port: 443,
+  path: '/peerjs',
+};
 
 export default function LobbyScreen() {
   const [joinCode, setJoinCode] = useState('');
@@ -36,8 +32,7 @@ export default function LobbyScreen() {
 
   const createRoom = (attempt = 0) => {
     setError('');
-    const roomCode = generateRoomCode();
-    const newPeer = new Peer(roomCode);
+    const newPeer = new Peer(undefined, PEER_OPTIONS);
     setPeer(newPeer);
 
     newPeer.on('open', (id: string) => {
@@ -76,7 +71,7 @@ export default function LobbyScreen() {
     }
 
     setError('');
-    const newPeer = new Peer();
+    const newPeer = new Peer(undefined, PEER_OPTIONS);
     setPeer(newPeer);
 
     newPeer.on('open', (myId: string) => {
@@ -146,6 +141,8 @@ export default function LobbyScreen() {
             <p className="text-gray-400 text-sm mb-4">or</p>
             <div className="flex flex-col space-y-3">
               <input
+                id="room-code"
+                name="roomCode"
                 type="text"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toLowerCase())}
