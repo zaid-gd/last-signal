@@ -1,109 +1,83 @@
-import { useState, useEffect } from 'react';
-import { useConnectionStore } from '../stores/useConnectionStore';
+import { useEffect, useState } from 'react';
 import { useGameStore } from '../stores/useGameStore';
+import GameChatOverlay from './GameChatOverlay';
+
+const SYSTEM_ROWS = [
+  { key: 'hull' as const, label: 'HULL INTEGRITY' },
+  { key: 'lifeSupport' as const, label: 'LIFE SUPPORT' },
+  { key: 'power' as const, label: 'POWER GRID' },
+  { key: 'navigation' as const, label: 'NAVIGATION' },
+  { key: 'comms' as const, label: 'COMMS ARRAY' },
+];
 
 export default function MissionControlScreen() {
-  const [inputText, setInputText] = useState('');
-  const { conn } = useConnectionStore();
-  const { messages, addMessage } = useGameStore();
+  const [selected, setSelected] = useState(0);
+  const systemHealth = useGameStore((s) => s.systemHealth);
 
   useEffect(() => {
-    if (!conn) return;
-
-    const handleData = (data: any) => {
-      try {
-        const msg = typeof data === 'string' ? JSON.parse(data) : data;
-
-        if (msg.type === 'chat') {
-          addMessage({ ...msg, from: 'partner' });
-        }
-      } catch (e) {
-        console.error('Failed to parse message:', e);
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelected((i) => Math.max(0, i - 1));
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelected((i) => Math.min(SYSTEM_ROWS.length - 1, i + 1));
       }
     };
-
-    conn.on('data', handleData);
-
-    return () => {
-      conn.off('data', handleData);
-    };
-  }, [conn, addMessage]);
-
-  const sendMessage = () => {
-    if (!inputText.trim() || !conn) return;
-
-    const message = {
-      type: 'chat',
-      text: inputText,
-      sentAt: Date.now(),
-      from: 'self',
-    };
-
-    conn.send(JSON.stringify(message));
-    addMessage(message);
-    setInputText('');
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      sendMessage();
-    }
-  };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#000000' }}>
-      <div className="flex-1 flex flex-col items-center justify-center p-8">
-        <h1
-          className="text-6xl font-bold mb-8"
-          style={{ fontFamily: 'monospace', color: '#00ff41' }}
-        >
+    <div className="relative h-screen w-screen overflow-hidden bg-black text-[#00ff41]">
+      <div
+        className="absolute inset-0 flex flex-col p-8 pt-10 font-mono"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(0,255,65,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,65,0.03) 1px, transparent 1px)',
+          backgroundSize: '32px 32px',
+        }}
+      >
+        <h1 className="mb-6 text-center text-xl font-bold tracking-[0.3em] text-[#00ff41] opacity-90 md:text-2xl">
           MISSION CONTROL
         </h1>
-
-        <div className="w-full max-w-2xl bg-gray-900 bg-opacity-50 rounded-lg p-6 mb-8 h-64 overflow-y-auto">
-          {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className="mb-2"
-              style={{
-                fontFamily: 'monospace',
-                color: msg.from === 'self' ? '#00ff41' : '#00e5ff'
-              }}
-            >
-              <span className="opacity-60">[{msg.from === 'self' ? 'YOU' : 'ASTRONAUT'}]</span> {msg.text}
-            </div>
-          ))}
+        <p className="mb-4 text-center text-[10px] uppercase tracking-widest opacity-50">
+          ↑↓ select system — T to chat
+        </p>
+        <div className="mx-auto w-full max-w-lg flex-1 rounded border border-[#00ff41]/25 bg-transparent px-4 py-3">
+          <p className="mb-3 text-[11px] uppercase tracking-wider opacity-60">Ship systems</p>
+          <ul className="space-y-1">
+            {SYSTEM_ROWS.map((row, idx) => {
+              const v = systemHealth[row.key];
+              const active = idx === selected;
+              return (
+                <li
+                  key={row.key}
+                  className={`flex cursor-default items-center justify-between rounded px-2 py-1.5 text-sm transition-colors ${
+                    active ? 'bg-[#00ff41]/10 text-[#00ff41]' : 'text-[#00ff41]/80'
+                  }`}
+                >
+                  <span>{row.label}</span>
+                  <span className="tabular-nums">{v}%</span>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       </div>
 
-      <div className="p-6 bg-gray-900 bg-opacity-70">
-        <div className="max-w-2xl mx-auto flex space-x-4">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Type message..."
-            className="flex-1 px-4 py-3 bg-black border-2 rounded"
-            style={{
-              borderColor: '#00ff41',
-              fontFamily: 'monospace',
-              color: '#00ff41'
-            }}
-          />
-          <button
-            onClick={sendMessage}
-            className="px-8 py-3 rounded font-semibold"
-            style={{
-              backgroundColor: '#00ff41',
-              color: '#000000',
-              fontFamily: 'monospace'
-            }}
-          >
-            SEND
-          </button>
-        </div>
-      </div>
+      <GameChatOverlay
+        selfColor="#00ff41"
+        partnerColor="#00e5ff"
+        selfTag="YOU"
+        partnerTag="ASTRONAUT"
+        inputBorderColor="#00ff41"
+        sendBg="#00ff41"
+        sendText="#000000"
+      />
     </div>
   );
 }
