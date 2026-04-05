@@ -19,3 +19,6 @@ Replace PeerJS with Firebase signaling + pure WebRTC P2P.
 - Replaced `src/signaling/P2PConnection.ts` with `src/network/P2PManager.ts`.
 - Moved the 10-second receive delay out of the screens and into the networking layer.
 - Verified `npm run typecheck` and `npm run build` pass after the refactor.
+- Added distinct host/joiner waiting UI so the joiner no longer sees the host's "Share this Room ID" screen.
+- Added candidate queueing, connection-state logs, and host-side ICE restart handling in `P2PManager`.
+- Tightened the joiner answer flow so remote ICE candidates are only flushed after both local and remote descriptions are set; candidate logs now include the ICE candidate type to help diagnose `checking -> disconnected` failures.

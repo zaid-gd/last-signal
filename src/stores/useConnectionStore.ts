@@ -7,6 +7,7 @@ interface ConnectionStore {
   peerId: string | null;
   fullPeerId: string | null;
   partnerPeerId: string | null;
+  connectionRole: 'host' | 'joiner' | null;
   connectionState: 'idle' | 'waiting' | 'connected';
   role: 'astronaut' | 'missionControl' | null;
   conn: ReturnType<P2PManager['getConnection']> | null;
@@ -29,6 +30,7 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   peerId: null,
   fullPeerId: null,
   partnerPeerId: null,
+  connectionRole: null,
   connectionState: 'idle',
   role: null,
   conn: null,
@@ -57,6 +59,7 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
         peerId: roomId,
         fullPeerId: myId,
         partnerPeerId: null,
+        connectionRole: 'host',
         conn: peer.getConnection(),
         connectionState: 'waiting',
       });
@@ -95,6 +98,7 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
         peerId: normalizedRoomCode,
         fullPeerId: myId,
         partnerPeerId: null,
+        connectionRole: 'joiner',
         conn: peer.getConnection(),
         connectionState: 'waiting',
       });

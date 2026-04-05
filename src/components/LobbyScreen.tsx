@@ -9,6 +9,7 @@ export default function LobbyScreen() {
 
   const {
     peerId,
+    connectionRole,
     connectionState,
     createRoom,
     joinRoom,
@@ -85,19 +86,29 @@ export default function LobbyScreen() {
       )}
 
       {connectionState === 'waiting' && (
-        <div className="text-center max-w-md">
-          <p className="text-lg text-gray-300 mb-6">Share this Room ID:</p>
-          <div className="bg-gray-800 border border-gray-600 rounded p-4 mb-6 break-all font-mono text-sm">
-            {peerId}
+        connectionRole === 'host' ? (
+          <div className="text-center max-w-md">
+            <p className="text-lg text-gray-300 mb-6">Share this Room ID:</p>
+            <div className="bg-gray-800 border border-gray-600 rounded p-4 mb-6 break-all font-mono text-sm">
+              {peerId}
+            </div>
+            <button
+              onClick={copyToClipboard}
+              className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition mb-4"
+            >
+              {copied ? 'Copied!' : 'Copy ID'}
+            </button>
+            <p className="text-gray-400 text-sm">Waiting for partner to join...</p>
           </div>
-          <button
-            onClick={copyToClipboard}
-            className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition mb-4"
-          >
-            {copied ? 'Copied!' : 'Copy ID'}
-          </button>
-          <p className="text-gray-400 text-sm">Waiting for partner to join...</p>
-        </div>
+        ) : (
+          <div className="text-center max-w-md">
+            <p className="text-lg text-gray-300 mb-4">Joining Room</p>
+            <div className="bg-gray-800 border border-gray-600 rounded p-4 mb-4 break-all font-mono text-sm">
+              {peerId}
+            </div>
+            <p className="text-gray-400 text-sm">Waiting for the host to finish the connection handshake...</p>
+          </div>
+        )
       )}
 
       {connectionState === 'connected' && (
