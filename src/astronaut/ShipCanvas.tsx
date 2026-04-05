@@ -1,6 +1,7 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PerspectiveCamera } from '@react-three/drei';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import React from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
 
@@ -8,88 +9,23 @@ const CORRIDOR = { width: 4, height: 3, length: 20 } as const;
 const WALL_COLOR = '#1a1f2e';
 const FLOOR_COLOR = '#0f1218';
 const CEILING_COLOR = '#0d1018';
+const PANEL_RECESS_COLOR = '#0d1525';
+const BEAM_COLOR = '#151c2a';
 
-const AMBIENT = { color: '#112233', intensity: 0.4 } as const;
-const CEILING_LIGHT = { color: '#334477', intensity: 0.8, distance: 6 } as const;
-const EMERGENCY = { color: '#ff2222', intensity: 0 } as const;
+const PANEL_POSITIONS = [
+  { key: 'hull' as const, position: [-2, 1.2, -3], rotation: [0, Math.PI / 2, 0] },
+  { key: 'lifeSupport' as const, position: [2, 1.2, -7], rotation: [0, -Math.PI / 2, 0] },
+  { key: 'power' as const, position: [-2, 1.2, -11], rotation: [0, Math.PI / 2, 0] },
+  { key: 'navigation' as const, position: [2, 1.2, -15], rotation: [0, -Math.PI / 2, 0] },
+  { key: 'comms' as const, position: [-2, 1.2, -19], rotation: [0, Math.PI / 2, 0] },
+];
 
-const PANEL_LAYOUT = [
-  { z: -8, side: 'left' as const, key: 'hull' as const },
-  { z: -4, side: 'right' as const, key: 'lifeSupport' as const },
-  { z: 0, side: 'left' as const, key: 'power' as const },
-  { z: 4, side: 'right' as const, key: 'navigation' as const },
-  { z: 8, side: 'left' as const, key: 'comms' as const },
-] as const;
-
-type SystemKey = (typeof PANEL_LAYOUT)[number]['key'];
+type SystemKey = (typeof PANEL_POSITIONS)[number]['key'];
 
 function healthToStatusColor(health: number): string {
-  if (health >= 60) return '#22ff44';
-  if (health >= 25) return '#ffaa00';
+  if (health >= 60) return '#00ff44';
+  if (health >= 30) return '#ffb000';
   return '#ff2222';
-}
-
-function useFloorGridTextures() {
-  return useMemo(() => {
-    const size = 512;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return { map: null as THREE.CanvasTexture | null, emissiveMap: null as THREE.CanvasTexture | null };
-
-    ctx.fillStyle = FLOOR_COLOR;
-    ctx.fillRect(0, 0, size, size);
-
-    const cells = 16;
-    const step = size / cells;
-    ctx.strokeStyle = '#1c2438';
-    ctx.lineWidth = 2;
-    for (let i = 0; i <= cells; i++) {
-      const p = i * step;
-      ctx.beginPath();
-      ctx.moveTo(p, 0);
-      ctx.lineTo(p, size);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, p);
-      ctx.lineTo(size, p);
-      ctx.stroke();
-    }
-
-    const map = new THREE.CanvasTexture(canvas);
-    map.wrapS = map.wrapT = THREE.RepeatWrapping;
-    map.repeat.set(CORRIDOR.length / 4, CORRIDOR.width / 4);
-    map.anisotropy = 8;
-
-    const emCanvas = document.createElement('canvas');
-    emCanvas.width = size;
-    emCanvas.height = size;
-    const emCtx = emCanvas.getContext('2d');
-    if (!emCtx) return { map, emissiveMap: null as THREE.CanvasTexture | null };
-
-    emCtx.fillStyle = '#000000';
-    emCtx.fillRect(0, 0, size, size);
-    emCtx.strokeStyle = '#ffffff';
-    emCtx.lineWidth = 3;
-    for (let i = 0; i <= cells; i++) {
-      const p = i * step;
-      emCtx.beginPath();
-      emCtx.moveTo(p, 0);
-      emCtx.lineTo(p, size);
-      emCtx.stroke();
-      emCtx.beginPath();
-      emCtx.moveTo(0, p);
-      emCtx.lineTo(size, p);
-      emCtx.stroke();
-    }
-
-    const emissiveMap = new THREE.CanvasTexture(emCanvas);
-    emissiveMap.wrapS = emissiveMap.wrapT = THREE.RepeatWrapping;
-    emissiveMap.repeat.copy(map.repeat);
-
-    return { map, emissiveMap };
-  }, []);
 }
 
 function Corridor() {
@@ -97,8 +33,9 @@ function Corridor() {
     () =>
       new THREE.MeshStandardMaterial({
         color: WALL_COLOR,
-        metalness: 0.35,
-        roughness: 0.55,
+        metalness: 0.3,
+        roughness: 0.8,
+        emissive: '#000000',
       }),
     []
   );
@@ -107,98 +44,182 @@ function Corridor() {
     () =>
       new THREE.MeshStandardMaterial({
         color: CEILING_COLOR,
-        metalness: 0.2,
-        roughness: 0.75,
+        metalness: 0.1,
+        roughness: 0.9,
+        emissive: '#000000',
       }),
     []
   );
 
-  const { map: floorMap, emissiveMap: floorEmissive } = useFloorGridTextures();
+  const floorMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: FLOOR_COLOR,
+        metalness: 0.1,
+        roughness: 0.9,
+        emissive: '#000000',
+      }),
+    []
+  );
 
-  const floorMaterials = useMemo(() => {
-    const side = new THREE.MeshStandardMaterial({
-      color: FLOOR_COLOR,
-      metalness: 0.15,
-      roughness: 0.85,
-    });
-    const top = new THREE.MeshStandardMaterial({
-      color: FLOOR_COLOR,
-      metalness: 0.15,
-      roughness: 0.85,
-      map: floorMap ?? undefined,
-      emissive: '#111822',
-      emissiveMap: floorEmissive ?? undefined,
-      emissiveIntensity: floorEmissive ? 0.35 : 0,
-    });
-    // +X, -X, +Y (top), -Y (bottom), +Z, -Z
-    return [side, side, top, side, side, side] as THREE.MeshStandardMaterial[];
-  }, [floorMap, floorEmissive]);
+  const recessMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: PANEL_RECESS_COLOR,
+        metalness: 0.2,
+        roughness: 0.85,
+        emissive: '#000000',
+      }),
+    []
+  );
+
+  const beamMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: BEAM_COLOR,
+        metalness: 0.3,
+        roughness: 0.75,
+        emissive: '#000000',
+      }),
+    []
+  );
+
+  const gridMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: '#1a2030',
+        emissive: '#001122',
+        emissiveIntensity: 0.15,
+        metalness: 0.1,
+        roughness: 0.95,
+      }),
+    []
+  );
 
   const hw = CORRIDOR.width / 2;
-  const hh = CORRIDOR.height / 2;
   const t = 0.1;
+
+  // Recessed panel positions every 4 units along corridor
+  const recessZ = [-8, -4, 0, 4, 8];
+  // Ceiling beam positions every 4 units
+  const beamZ = [-8, -4, 0, 4, 8];
+  // Floor grid lines every 1 unit
+  const gridZ = Array.from({ length: 21 }, (_, i) => -10 + i);
 
   return (
     <group>
-      <mesh position={[0, -t / 2, 0]} material={floorMaterials}>
+      {/* Main floor */}
+      <mesh position={[0, -t / 2, 0]} material={floorMat}>
         <boxGeometry args={[CORRIDOR.width, t, CORRIDOR.length]} />
       </mesh>
 
+      {/* Floor grid lines */}
+      {gridZ.map((z) => (
+        <mesh key={`grid-${z}`} position={[0, 0.01, z]} material={gridMat}>
+          <boxGeometry args={[CORRIDOR.width, 0.02, 0.03]} />
+        </mesh>
+      ))}
+
+      {/* Main ceiling */}
       <mesh position={[0, CORRIDOR.height + t / 2, 0]} material={ceilingMat}>
         <boxGeometry args={[CORRIDOR.width, t, CORRIDOR.length]} />
       </mesh>
 
-      <mesh position={[-hw - t / 2, hh, 0]} material={wallMat}>
+      {/* Ceiling beams */}
+      {beamZ.map((z) => (
+        <mesh key={`beam-${z}`} position={[0, CORRIDOR.height - 0.075, z]} material={beamMat}>
+          <boxGeometry args={[CORRIDOR.width + 0.2, 0.15, 0.2]} />
+        </mesh>
+      ))}
+
+      {/* Left wall */}
+      <mesh position={[-hw - t / 2, CORRIDOR.height / 2, 0]} material={wallMat}>
         <boxGeometry args={[t, CORRIDOR.height, CORRIDOR.length]} />
       </mesh>
 
-      <mesh position={[hw + t / 2, hh, 0]} material={wallMat}>
+      {/* Right wall */}
+      <mesh position={[hw + t / 2, CORRIDOR.height / 2, 0]} material={wallMat}>
         <boxGeometry args={[t, CORRIDOR.height, CORRIDOR.length]} />
       </mesh>
+
+      {/* Recessed wall panels - left */}
+      {recessZ.map((z) => (
+        <mesh key={`recess-left-${z}`} position={[-hw + 0.05, CORRIDOR.height / 2, z]} material={recessMat}>
+          <boxGeometry args={[0.1, 2.5, 0.8]} />
+        </mesh>
+      ))}
+
+      {/* Recessed wall panels - right */}
+      {recessZ.map((z) => (
+        <mesh key={`recess-right-${z}`} position={[hw - 0.05, CORRIDOR.height / 2, z]} material={recessMat}>
+          <boxGeometry args={[0.1, 2.5, 0.8]} />
+        </mesh>
+      ))}
     </group>
   );
 }
 
 function SystemPanel({
   config,
-  panelMat,
+  onClick,
 }: {
-  config: { z: number; side: 'left' | 'right'; key: SystemKey };
-  panelMat: THREE.MeshStandardMaterial;
+  config: { key: SystemKey; position: number[]; rotation: number[] };
+  onClick: () => void;
 }) {
-  const sphereMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const { z, side, key: sysKey } = config;
-
-  const px = side === 'left' ? -CORRIDOR.width / 2 + 0.05 : CORRIDOR.width / 2 - 0.05;
-  const py = 0.5 + 0.75;
+  const { key: sysKey, position, rotation } = config;
+  const statusRef = useRef<THREE.MeshStandardMaterial>(null);
 
   useFrame(() => {
     const health = useGameStore.getState().systemHealth[sysKey];
     const c = healthToStatusColor(health);
     const col = new THREE.Color(c);
-    if (sphereMatRef.current) {
-      sphereMatRef.current.color.copy(col);
-      sphereMatRef.current.emissive.copy(col);
-      sphereMatRef.current.emissiveIntensity = 1.25;
+    if (statusRef.current) {
+      statusRef.current.color.copy(col);
+      statusRef.current.emissive.copy(col);
+      statusRef.current.emissiveIntensity = health < 50 ? 1.2 : 0.6;
     }
   });
 
-  const rotY = side === 'left' ? Math.PI / 2 : -Math.PI / 2;
+  const [px, py, pz] = position;
+  const [rx, ry, rz] = rotation;
 
   return (
-    <group position={[px, py, z]} rotation={[0, rotY, 0]}>
-      <mesh material={panelMat}>
-        <boxGeometry args={[0.1, 1.5, 2]} />
+    <group position={[px, py, pz]} rotation={[rx, ry, rz]}>
+      {/* Clickable panel face */}
+      <mesh onClick={onClick}>
+        <boxGeometry args={[1.8, 1.4, 0.08]} />
+        <meshStandardMaterial color="#0d1520" metalness={0.2} roughness={0.85} emissive="#000000" />
       </mesh>
+
+      {/* Screen/label area */}
+      <mesh position={[0, 0.3, 0.05]}>
+        <boxGeometry args={[1.2, 0.4, 0.02]} />
+        <meshStandardMaterial color="#001133" metalness={0.1} roughness={0.9} emissive="#000000" />
+      </mesh>
+
+      {/* 4 indicator buttons - 2x2 grid */}
+      {[
+        [-0.4, -0.2],
+        [0.4, -0.2],
+        [-0.4, -0.5],
+        [0.4, -0.5],
+      ].map(([bx, by], i) => (
+        <mesh key={i} position={[bx, by, 0.05]}>
+          <boxGeometry args={[0.15, 0.15, 0.05]} />
+          <meshStandardMaterial color="#1a2535" metalness={0.2} roughness={0.8} emissive="#000000" />
+        </mesh>
+      ))}
+
+      {/* Status light above panel */}
       <mesh position={[0, 0.9, 0]}>
         <sphereGeometry args={[0.08, 16, 16]} />
         <meshStandardMaterial
-          ref={sphereMatRef}
-          color="#22ff44"
-          emissive="#22ff44"
-          emissiveIntensity={1.25}
-          metalness={0.2}
-          roughness={0.4}
+          ref={statusRef}
+          color="#00ff44"
+          emissive="#00ff44"
+          emissiveIntensity={0.6}
+          metalness={0.1}
+          roughness={0.3}
         />
       </mesh>
     </group>
@@ -206,61 +227,116 @@ function SystemPanel({
 }
 
 function ShipLights() {
-  const e1 = useRef<THREE.PointLight>(null);
-  const e2 = useRef<THREE.PointLight>(null);
+  const emergency1 = useRef<THREE.PointLight>(null);
+  const emergency2 = useRef<THREE.PointLight>(null);
+  const clock = useRef(0);
 
-  useFrame(() => {
-    const values = Object.values(useGameStore.getState().systemHealth);
-    const minH = Math.min(...values);
-    const alert = minH < 30;
-    const intensity = alert ? 0.85 : EMERGENCY.intensity;
-    if (e1.current) e1.current.intensity = intensity;
-    if (e2.current) e2.current.intensity = intensity;
+  useFrame((state) => {
+    clock.current = state.clock.elapsedTime;
+    const { systemHealth } = useGameStore.getState();
+
+    // Emergency lights pulse when hull < 50 or power < 50
+    const emergencyActive = systemHealth.hull < 50 || systemHealth.power < 50;
+    const pulseIntensity = emergencyActive ? Math.sin(clock.current * 3) * 0.5 + 0.8 : 0;
+
+    if (emergency1.current) emergency1.current.intensity = pulseIntensity;
+    if (emergency2.current) emergency2.current.intensity = pulseIntensity;
   });
-
-  const ceilingZ = [-6, -2, 2, 6] as const;
 
   return (
     <>
-      <ambientLight color={AMBIENT.color} intensity={AMBIENT.intensity} />
-      {ceilingZ.map((cz) => (
-        <pointLight
-          key={cz}
-          position={[0, CORRIDOR.height - 0.05, cz]}
-          color={CEILING_LIGHT.color}
-          intensity={CEILING_LIGHT.intensity}
-          distance={CEILING_LIGHT.distance}
-          decay={2}
-        />
-      ))}
-      <pointLight
-        ref={e1}
-        position={[-1.4, CORRIDOR.height - 0.15, -4]}
-        color={EMERGENCY.color}
-        intensity={EMERGENCY.intensity}
-        distance={14}
-        decay={2}
-      />
-      <pointLight
-        ref={e2}
-        position={[1.4, CORRIDOR.height - 0.15, 4]}
-        color={EMERGENCY.color}
-        intensity={EMERGENCY.intensity}
-        distance={14}
-        decay={2}
-      />
+      <ambientLight color="#112233" intensity={0.3} />
+
+      {/* Four ceiling point lights */}
+      <pointLight position={[0, 2.5, -2]} color="#334477" intensity={0.8} distance={6} decay={2} />
+      <pointLight position={[0, 2.5, -7]} color="#334477" intensity={0.8} distance={6} decay={2} />
+      <pointLight position={[0, 2.5, -12]} color="#334477" intensity={0.8} distance={6} decay={2} />
+      <pointLight position={[0, 2.5, -17]} color="#334477" intensity={0.8} distance={6} decay={2} />
+
+      {/* Emergency lights - initially off, pulse when critical */}
+      <pointLight ref={emergency1} position={[-1.5, 2, -5]} color="#ff2222" intensity={0} distance={8} decay={1.5} />
+      <pointLight ref={emergency2} position={[1.5, 2, -14]} color="#ff2222" intensity={0} distance={8} decay={1.5} />
     </>
+  );
+}
+
+function InteractionHint() {
+  const [hint, setHint] = useState<SystemKey | null>(null);
+  const { activeMiniGame } = useGameStore();
+  const camera = useThree((state) => state.camera);
+  const interactionDistance = 1.5;
+
+  useFrame(() => {
+    const cameraPos = camera.position;
+
+    let closestPanel: typeof PANEL_POSITIONS[0] | null = null;
+    let closestDistance = Infinity;
+
+    for (const panel of PANEL_POSITIONS) {
+      const [px, _, pz] = panel.position;
+      const distance = Math.sqrt(
+        Math.pow(cameraPos.x - px, 2) +
+        Math.pow(cameraPos.z - pz, 2)
+      );
+
+      if (distance < interactionDistance && distance < closestDistance) {
+        closestDistance = distance;
+        closestPanel = panel;
+      }
+    }
+
+    if (closestPanel && !activeMiniGame) {
+      setHint(closestPanel.key);
+    } else {
+      setHint(null);
+    }
+  });
+
+  if (!hint) return null;
+
+  const hintText = `Press E to open ${hint.toUpperCase()} panel`;
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        background: 'rgba(0, 0, 0, 0.8)',
+        color: '#00ff41',
+        padding: '8px 16px',
+        borderRadius: '4px',
+        border: '1px solid #00ff41',
+        fontSize: '14px',
+        fontFamily: 'monospace',
+        pointerEvents: 'none',
+        zIndex: 1000,
+      }}
+    >
+      {hintText}
+    </div>
   );
 }
 
 function CameraRig({ lookEnabled }: { lookEnabled: boolean }) {
   const group = useRef<THREE.Group>(null);
-  /** Default camera looks down -Z; rotate so view runs toward +Z (forward along the corridor). */
-  const yaw = useRef(Math.PI);
+  const yaw = useRef(0);
   const dragging = useRef(false);
   const lookEnabledRef = useRef(lookEnabled);
   lookEnabledRef.current = lookEnabled;
   const { gl } = useThree();
+
+  // Camera starts at [0, 1.6, 0] looking toward z=-1
+  const position = useRef({ x: 0, z: 0 });
+  const velocity = useRef({ x: 0, z: 0 });
+  const keys = useRef({ w: false, a: false, s: false, d: false, e: false });
+  const lastInteractionTime = useRef(0);
+
+  const moveSpeed = 0.04;
+  const friction = 0.85;
+  const interactionDistance = 1.5;
+  const interactionCooldown = 1000;
 
   useEffect(() => {
     if (!lookEnabled && document.pointerLockElement === gl.domElement) {
@@ -282,7 +358,7 @@ function CameraRig({ lookEnabled }: { lookEnabled: boolean }) {
       if (!lookEnabledRef.current) return;
       const locked = document.pointerLockElement === el;
       if (locked || dragging.current) {
-        yaw.current -= e.movementX * 0.002;
+        yaw.current -= e.movementX * 0.00075;
       }
     };
     const onClick = () => {
@@ -290,53 +366,144 @@ function CameraRig({ lookEnabled }: { lookEnabled: boolean }) {
       el.requestPointerLock();
     };
 
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!lookEnabledRef.current) return;
+      const key = e.key.toLowerCase();
+      if (key in keys.current) {
+        keys.current[key as keyof typeof keys.current] = true;
+        e.preventDefault();
+      }
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!lookEnabledRef.current) return;
+      const key = e.key.toLowerCase();
+      if (key in keys.current) {
+        keys.current[key as keyof typeof keys.current] = false;
+        e.preventDefault();
+      }
+    };
+
     el.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mouseup', onMouseUp);
     document.addEventListener('mousemove', onMove);
     el.addEventListener('click', onClick);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
 
     return () => {
       el.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mouseup', onMouseUp);
       document.removeEventListener('mousemove', onMove);
       el.removeEventListener('click', onClick);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
     };
   }, [gl]);
 
   useFrame(() => {
+    // Gate movement when mini-game is active
+    const { activeMiniGame } = useGameStore.getState();
+    if (activeMiniGame) return;
+
+    // Get camera forward and right vectors
+    const forward = new THREE.Vector3(0, 0, -1);
+    const right = new THREE.Vector3(1, 0, 0);
+
+    // Rotate these vectors based on camera yaw
+    forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw.current);
+    right.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw.current);
+
+    // Calculate movement based on input
+    let moveX = 0;
+    let moveZ = 0;
+
+    if (keys.current.w) {
+      moveX += forward.x * moveSpeed;
+      moveZ += forward.z * moveSpeed;
+    }
+    if (keys.current.s) {
+      moveX -= forward.x * moveSpeed;
+      moveZ -= forward.z * moveSpeed;
+    }
+    if (keys.current.a) {
+      moveX -= right.x * moveSpeed;
+      moveZ -= right.z * moveSpeed;
+    }
+    if (keys.current.d) {
+      moveX += right.x * moveSpeed;
+      moveZ += right.z * moveSpeed;
+    }
+
+    // Apply movement to velocity with lerp smoothing
+    velocity.current.x += (moveX - velocity.current.x) * 0.1;
+    velocity.current.z += (moveZ - velocity.current.z) * 0.1;
+
+    // Apply friction
+    velocity.current.x *= friction;
+    velocity.current.z *= friction;
+
+    // Update position
+    position.current.x += velocity.current.x;
+    position.current.z += velocity.current.z;
+
+    // Constrain to corridor bounds - allow full corridor movement
+    const maxX = 1.8;
+    const minZ = -19; // Back of corridor (near comms panel)
+    const maxZ = -1;  // Front of corridor (near start)
+    position.current.x = Math.max(-maxX, Math.min(maxX, position.current.x));
+    position.current.z = Math.max(minZ, Math.min(maxZ, position.current.z));
+
+    // Check for panel interactions with 'E' key
+    const currentTime = Date.now();
+    if (keys.current.e && currentTime - lastInteractionTime.current > interactionCooldown) {
+      const { setActiveMiniGame } = useGameStore.getState();
+
+      // Check if near any panel
+      for (const panel of PANEL_POSITIONS) {
+        const [px, _, pz] = panel.position;
+        const distance = Math.sqrt(
+          Math.pow(position.current.x - px, 2) + Math.pow(position.current.z - pz, 2)
+        );
+
+        if (distance < interactionDistance) {
+          setActiveMiniGame(panel.key);
+          lastInteractionTime.current = currentTime;
+          break;
+        }
+      }
+    }
+
     if (group.current) {
       group.current.rotation.y = yaw.current;
+      group.current.position.x = position.current.x;
+      // Fixed height at 1.6, z position moves but camera looks toward z=-1
+      group.current.position.y = 1.6;
+      group.current.position.z = position.current.z;
     }
   });
 
   return (
-    <group ref={group} position={[0, 1.5, -8]}>
+    <group ref={group} position={[0, 1.6, 0]} rotation={[0, 0, 0]}>
       <PerspectiveCamera makeDefault fov={58} near={0.08} far={120} />
     </group>
   );
 }
 
 function ShipScene({ lookEnabled }: { lookEnabled: boolean }) {
-  const panelMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: '#252b3a',
-        metalness: 0.45,
-        roughness: 0.45,
-      }),
-    []
-  );
+  const { setActiveMiniGame } = useGameStore();
 
   return (
     <>
       <color attach="background" args={['#05070c']} />
-      <fog attach="fog" args={['#05070c', 12, 38]} />
+      <fog attach="fog" args={['#05070c', 8, 25]} />
       <ShipLights />
       <Corridor />
-      {PANEL_LAYOUT.map((cfg) => (
-        <SystemPanel key={cfg.key} config={cfg} panelMat={panelMat} />
+      {PANEL_POSITIONS.map((cfg) => (
+        <SystemPanel key={cfg.key} config={cfg} onClick={() => setActiveMiniGame(cfg.key)} />
       ))}
       <CameraRig lookEnabled={lookEnabled} />
+      <InteractionHint />
     </>
   );
 }

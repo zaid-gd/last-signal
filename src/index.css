@@ -1,3 +1,27 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-black text-[#00ff41] font-mono selection:bg-[#00ff41] selection:text-black;
+    -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* CRT Phosphor Glow */
+  .text-glow {
+    text-shadow: 0 0 5px rgba(0, 255, 65, 0.7);
+  }
+
+  /* Custom Scrollbar for Terminal */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-[#00ff41]/20 rounded;
+  }
+}

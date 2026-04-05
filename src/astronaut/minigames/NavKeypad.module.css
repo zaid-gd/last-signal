@@ -1,0 +1,127 @@
+.root {
+  position: relative;
+  box-sizing: border-box;
+  max-width: 18rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-radius: 4px;
+  background: rgba(5, 8, 14, 0.92);
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #a8b0c4;
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #00e5ff;
+}
+
+.timer {
+  margin-bottom: 0.5rem;
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  color: #00e5ff;
+}
+
+.timer.penalty {
+  color: #ffb000;
+}
+
+.hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.65rem;
+  opacity: 0.8;
+  line-height: 1.35;
+}
+
+.display {
+  margin-bottom: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 1.5rem;
+  letter-spacing: 0.25em;
+  text-align: center;
+  color: #00e5ff;
+  font-variant-numeric: tabular-nums;
+  min-height: 2.25rem;
+}
+
+.pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+}
+
+.key {
+  padding: 0.65rem;
+  border: 2px solid #00e5ff;
+  border-radius: 4px;
+  background: rgba(0, 229, 255, 0.08);
+  color: #00e5ff;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.key:hover:not(:disabled) {
+  background: rgba(0, 229, 255, 0.2);
+}
+
+.key:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.key:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.msg {
+  margin-top: 0.75rem;
+  min-height: 1rem;
+  font-size: 0.65rem;
+  color: #ff8888;
+}
+
+.ok {
+  color: #44ff88;
+}
+
+.closeBtn {
+  margin-top: 0.75rem;
+  width: 100%;
+  padding: 0.5rem;
+  border: 2px solid #00e5ff;
+  border-radius: 4px;
+  background: rgba(0, 229, 255, 0.1);
+  color: #00e5ff;
+  font-family: inherit;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.65rem;
+}
+
+.exitBtn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #ff4444;
+  border-radius: 4px;
+  background: rgba(255, 68, 68, 0.1);
+  color: #ff6666;
+  font-size: 0.65rem;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.exitBtn:hover {
+  background: rgba(255, 68, 68, 0.25);
+}

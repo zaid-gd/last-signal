@@ -1,4 +1,5 @@
 import { Signaling, type RoomState } from '../signaling/FirestoreSignaling';
+import { useGameStore } from '../stores/useGameStore';
 
 type DataHandler = (data: string) => void;
 
@@ -10,10 +11,11 @@ class DataConnectionAdapter {
     this.channel = channel;
     this.channel.onmessage = (event) => {
       const payload = typeof event.data === 'string' ? event.data : String(event.data);
-      console.log('Message received, scheduling 10s delay');
+      const delayMs = useGameStore.getState().commsDelaySeconds * 1000;
+      console.log(`Message received, scheduling ${delayMs/1000}s delay`);
       window.setTimeout(() => {
         this.handlers.forEach((handler) => handler(payload));
-      }, 10000);
+      }, delayMs);
     };
   }
 
@@ -133,8 +135,15 @@ export class P2PManager {
   }
 
   private createPeerConnection() {
+    const iceServers = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: 'stun:stun.relay.metered.ca:80' }
+    ];
+    
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      iceServers,
       iceCandidatePoolSize: 10,
     });
 
@@ -153,6 +162,14 @@ export class P2PManager {
         console.log('Restarting ICE negotiation from host');
         void this.restartIceNegotiation();
       } else if (pc.connectionState === 'failed') {
+        // General reconnection logic: wait 2 seconds then restart ICE
+        console.log('Connection failed, scheduling ICE restart in 2 seconds');
+        window.setTimeout(() => {
+          if (this.pc && this.pc.connectionState === 'failed') {
+            console.log('Executing ICE restart after delay');
+            void this.restartIceNegotiation();
+          }
+        }, 2000);
         void this.dumpDiagnostics('peer-connection-failed');
       }
     };

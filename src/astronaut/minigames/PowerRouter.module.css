@@ -1,0 +1,94 @@
+.root {
+  position: relative;
+  box-sizing: border-box;
+  max-width: 28rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-radius: 4px;
+  background: rgba(5, 8, 14, 0.92);
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #a8b0c4;
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #00e5ff;
+}
+
+.timer {
+  margin-bottom: 0.75rem;
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  color: #00e5ff;
+}
+
+.hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+.svgWrap {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+.node {
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.node.active {
+  filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.9));
+}
+
+.edge {
+  stroke: rgba(0, 229, 255, 0.35);
+  stroke-width: 3;
+  fill: none;
+}
+
+.token {
+  cursor: grab;
+  touch-action: none;
+}
+
+.tokenDragging {
+  cursor: grabbing;
+}
+
+.label {
+  font-size: 11px;
+  fill: #00e5ff;
+  font-family: inherit;
+}
+
+.status {
+  margin-top: 0.75rem;
+  min-height: 1.25rem;
+  font-size: 0.7rem;
+  color: #44ff88;
+}
+
+.exitBtn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #ff4444;
+  border-radius: 4px;
+  background: rgba(255, 68, 68, 0.1);
+  color: #ff6666;
+  font-size: 0.65rem;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.exitBtn:hover {
+  background: rgba(255, 68, 68, 0.25);
+}

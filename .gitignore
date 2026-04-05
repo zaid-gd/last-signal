@@ -11,6 +11,14 @@ node_modules/
 dist
 dist-ssr
 *.local
+.agents
+.agents/
+.codex
+.codex/ 
+.cursor
+.cursor/
+
+
 
 .vscode/*
 !.vscode/extensions.json
