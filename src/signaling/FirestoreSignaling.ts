@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import {
   arrayUnion,
   doc,
+  getDoc,
   getFirestore,
   onSnapshot,
   setDoc,
@@ -18,44 +19,24 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-function sanitizeSessionDescription(
-  description: RTCSessionDescriptionInit
-): RTCSessionDescriptionInit {
-  return {
-    type: description.type,
-    sdp: description.sdp ?? '',
-  };
-}
-
-function sanitizeIceCandidate(candidate: RTCIceCandidateInit): RTCIceCandidateInit {
-  const sanitized: RTCIceCandidateInit = {
-    candidate: candidate.candidate ?? '',
-  };
-
-  if (candidate.sdpMid !== undefined) {
-    sanitized.sdpMid = candidate.sdpMid;
-  }
-
-  if (candidate.sdpMLineIndex !== undefined) {
-    sanitized.sdpMLineIndex = candidate.sdpMLineIndex;
-  }
-
-  if (candidate.usernameFragment !== undefined) {
-    sanitized.usernameFragment = candidate.usernameFragment;
-  }
-
-  return sanitized;
-}
-
 function ensureFirebaseConfig() {
   if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.appId) {
     throw new Error('Missing Firebase config. Add your VITE_FIREBASE_* values.');
   }
 }
 
-ensureFirebaseConfig();
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+let dbInstance: ReturnType<typeof getFirestore> | null = null;
+
+function getDb() {
+  ensureFirebaseConfig();
+
+  if (!dbInstance) {
+    const app = initializeApp(firebaseConfig);
+    dbInstance = getFirestore(app);
+  }
+
+  return dbInstance;
+}
 
 export interface RoomState {
   hostId: string;
@@ -69,10 +50,10 @@ export interface RoomState {
 
 export class Signaling {
   static async createRoom(): Promise<{ roomId: string; myId: string }> {
-    const roomId = 'room-' + Math.random().toString(36).slice(2, 8);
-    const myId = 'peer-' + Math.random().toString(36).slice(2, 10);
+    const roomId = `room-${Math.random().toString(36).slice(2, 8)}`;
+    const myId = `peer-${Math.random().toString(36).slice(2, 10)}`;
 
-    await setDoc(doc(db, 'rooms', roomId), {
+    await setDoc(doc(getDb(), 'rooms', roomId), {
       hostId: myId,
       connected: false,
       hostCandidates: [],
@@ -83,8 +64,13 @@ export class Signaling {
   }
 
   static async joinRoom(roomId: string): Promise<string> {
-    const myId = 'peer-' + Math.random().toString(36).slice(2, 10);
-    const roomRef = doc(db, 'rooms', roomId);
+    const myId = `peer-${Math.random().toString(36).slice(2, 10)}`;
+    const roomRef = doc(getDb(), 'rooms', roomId);
+    const roomSnap = await getDoc(roomRef);
+
+    if (!roomSnap.exists()) {
+      throw new Error('Failed to connect. Check the room ID and try again.');
+    }
 
     await setDoc(roomRef, { joinerId: myId }, { merge: true });
 
@@ -92,19 +78,11 @@ export class Signaling {
   }
 
   static async setOffer(roomId: string, offer: RTCSessionDescriptionInit) {
-    await setDoc(
-      doc(db, 'rooms', roomId),
-      { offer: sanitizeSessionDescription(offer) },
-      { merge: true }
-    );
+    await setDoc(doc(getDb(), 'rooms', roomId), { offer }, { merge: true });
   }
 
   static async setAnswer(roomId: string, answer: RTCSessionDescriptionInit) {
-    await setDoc(
-      doc(db, 'rooms', roomId),
-      { answer: sanitizeSessionDescription(answer) },
-      { merge: true }
-    );
+    await setDoc(doc(getDb(), 'rooms', roomId), { answer }, { merge: true });
   }
 
   static async addIceCandidate(
@@ -113,17 +91,17 @@ export class Signaling {
     candidate: RTCIceCandidateInit
   ) {
     const field = role === 'host' ? 'hostCandidates' : 'joinerCandidates';
-    await updateDoc(doc(db, 'rooms', roomId), {
-      [field]: arrayUnion(sanitizeIceCandidate(candidate)),
+    await updateDoc(doc(getDb(), 'rooms', roomId), {
+      [field]: arrayUnion(candidate),
     });
   }
 
   static async markConnected(roomId: string) {
-    await setDoc(doc(db, 'rooms', roomId), { connected: true }, { merge: true });
+    await setDoc(doc(getDb(), 'rooms', roomId), { connected: true }, { merge: true });
   }
 
   static onRoomUpdate(roomId: string, callback: (state: RoomState | null) => void) {
-    return onSnapshot(doc(db, 'rooms', roomId), (snap) => {
+    return onSnapshot(doc(getDb(), 'rooms', roomId), (snap) => {
       callback(snap.exists() ? (snap.data() as RoomState) : null);
     });
   }
