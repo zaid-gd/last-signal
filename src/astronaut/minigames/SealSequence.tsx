@@ -20,7 +20,10 @@ export default function SealSequence({ onClose, onSuccess }: SealSequenceProps) 
     if (solvedRef.current) return;
     SystemsManager.applyPenalty('hull', 10);
     setStatus('wrong');
-  }, []);
+    setTimeout(() => {
+      onClose?.();
+    }, 2000);
+  }, [onClose]);
 
   const remainingMs = useRafCountdown(DURATION_MS, handleExpire);
 

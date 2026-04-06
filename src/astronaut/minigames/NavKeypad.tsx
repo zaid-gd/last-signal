@@ -24,11 +24,17 @@ export default function NavKeypad({ onClose, onSuccess }: NavKeypadProps) {
     const loop = () => {
       const rem = Math.max(0, endRef.current - Date.now());
       setRemainingMs(rem);
-      if (rem > 0) raf = requestAnimationFrame(loop);
+      if (rem > 0) {
+        raf = requestAnimationFrame(loop);
+      } else {
+        setTimeout(() => {
+          onClose?.();
+        }, 2000);
+      }
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [done]);
+  }, [done, onClose]);
 
   const append = (d: string) => {
     if (done) return;

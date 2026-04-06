@@ -1,15 +1,19 @@
 import { useGameStore } from '../stores/useGameStore';
 import { useConnectionStore } from '../stores/useConnectionStore';
+import { CrisisEngine } from './CrisisEngine';
 import type { SystemKey } from './types';
 
 export const SystemsManager = {
   fixSystem(system: SystemKey, amount: number, fromRemote: boolean = false): void {
+    CrisisEngine.reportFixedForSystem(system);
+
     // 1. Update local state
     useGameStore.setState((s) => ({
       systemHealth: {
         ...s.systemHealth,
         [system]: Math.min(100, s.systemHealth[system] + amount),
       },
+      commsDelaySeconds: system === 'comms' ? 10 : s.commsDelaySeconds,
     }));
 
     // 2. If this was a local action, sync it to the partner

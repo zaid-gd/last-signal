@@ -3,19 +3,26 @@ import { useGameStore } from '../stores/useGameStore';
 
 type DataHandler = (data: string) => void;
 
+interface QueuedPayload {
+  payload: string;
+  revealAt: number;
+}
+
+function debugWebRtc(...args: unknown[]) {
+  void args;
+}
+
 class DataConnectionAdapter {
   private channel: RTCDataChannel | null = null;
   private readonly handlers = new Set<DataHandler>();
+  private queue: QueuedPayload[] = [];
+  private rafId: number | null = null;
 
   attachChannel(channel: RTCDataChannel) {
     this.channel = channel;
     this.channel.onmessage = (event) => {
       const payload = typeof event.data === 'string' ? event.data : String(event.data);
-      const delayMs = useGameStore.getState().commsDelaySeconds * 1000;
-      console.log(`Message received, scheduling ${delayMs/1000}s delay`);
-      window.setTimeout(() => {
-        this.handlers.forEach((handler) => handler(payload));
-      }, delayMs);
+      this.queuePayload(payload);
     };
   }
 
@@ -37,6 +44,63 @@ class DataConnectionAdapter {
     if (event === 'data') {
       this.handlers.delete(handler);
     }
+  }
+
+  clearPending() {
+    this.queue = [];
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+  }
+
+  private queuePayload(payload: string) {
+    this.queue.push({
+      payload,
+      revealAt: this.getRevealTime(payload),
+    });
+    this.queue.sort((a, b) => a.revealAt - b.revealAt);
+    this.ensureDrainLoop();
+  }
+
+  private getRevealTime(payload: string) {
+    try {
+      const message = JSON.parse(payload) as { type?: unknown; sentAt?: unknown };
+      if (message.type === 'chat' && typeof message.sentAt === 'number') {
+        const delayMs = useGameStore.getState().commsDelaySeconds * 1000;
+        return Math.max(Date.now(), message.sentAt + delayMs);
+      }
+    } catch {
+      // Non-JSON transport payloads should not block gameplay.
+    }
+
+    return Date.now();
+  }
+
+  private ensureDrainLoop() {
+    if (this.rafId !== null) {
+      return;
+    }
+
+    const drain = () => {
+      const now = Date.now();
+      const ready: QueuedPayload[] = [];
+
+      while (this.queue.length > 0 && this.queue[0].revealAt <= now) {
+        const next = this.queue.shift();
+        if (next) {
+          ready.push(next);
+        }
+      }
+
+      ready.forEach(({ payload }) => {
+        this.handlers.forEach((handler) => handler(payload));
+      });
+
+      this.rafId = this.queue.length > 0 ? requestAnimationFrame(drain) : null;
+    };
+
+    this.rafId = requestAnimationFrame(drain);
   }
 }
 
@@ -67,7 +131,7 @@ export class P2PManager {
     this.cleanup();
 
     const { roomId, myId } = await Signaling.createRoom();
-    console.log('Peer created:', myId, 'room:', roomId);
+    debugWebRtc('Peer created:', myId, 'room:', roomId);
 
     this.roomId = roomId;
     this.role = 'host';
@@ -77,7 +141,7 @@ export class P2PManager {
 
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
-    console.log('Offer sent for room:', roomId);
+    debugWebRtc('Offer sent for room:', roomId);
     await Signaling.setOffer(roomId, {
       type: offer.type,
       sdp: offer.sdp,
@@ -91,7 +155,7 @@ export class P2PManager {
 
     const normalizedRoomId = roomId.trim().toLowerCase();
     const myId = await Signaling.joinRoom(normalizedRoomId);
-    console.log('Joiner created:', myId, 'joining room:', normalizedRoomId);
+    debugWebRtc('Joiner created:', myId, 'joining room:', normalizedRoomId);
 
     this.roomId = normalizedRoomId;
     this.role = 'joiner';
@@ -115,6 +179,7 @@ export class P2PManager {
     this.unsubscribeRoom = null;
     this.addedCandidates.clear();
     this.dataChannel?.close();
+    this.conn.clearPending();
     this.pc?.close();
     this.dataChannel = null;
     this.pc = null;
@@ -148,7 +213,7 @@ export class P2PManager {
     });
 
     pc.onconnectionstatechange = () => {
-      console.log('Peer connection state:', pc.connectionState);
+      debugWebRtc('Peer connection state:', pc.connectionState);
       if (pc.connectionState === 'connected') {
         this.notifyConnected();
       } else if (
@@ -159,14 +224,14 @@ export class P2PManager {
         (pc.connectionState === 'disconnected' || pc.connectionState === 'failed')
       ) {
         this.hasRestartedIce = true;
-        console.log('Restarting ICE negotiation from host');
+        debugWebRtc('Restarting ICE negotiation from host');
         void this.restartIceNegotiation();
       } else if (pc.connectionState === 'failed') {
         // General reconnection logic: wait 2 seconds then restart ICE
-        console.log('Connection failed, scheduling ICE restart in 2 seconds');
+        debugWebRtc('Connection failed, scheduling ICE restart in 2 seconds');
         window.setTimeout(() => {
           if (this.pc && this.pc.connectionState === 'failed') {
-            console.log('Executing ICE restart after delay');
+            debugWebRtc('Executing ICE restart after delay');
             void this.restartIceNegotiation();
           }
         }, 2000);
@@ -175,7 +240,7 @@ export class P2PManager {
     };
 
     pc.oniceconnectionstatechange = () => {
-      console.log('ICE connection state:', pc.iceConnectionState);
+      debugWebRtc('ICE connection state:', pc.iceConnectionState);
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         this.notifyConnected();
       } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
@@ -184,11 +249,11 @@ export class P2PManager {
     };
 
     pc.onsignalingstatechange = () => {
-      console.log('Signaling state:', pc.signalingState);
+      debugWebRtc('Signaling state:', pc.signalingState);
     };
 
     pc.onicegatheringstatechange = () => {
-      console.log('ICE gathering state:', pc.iceGatheringState);
+      debugWebRtc('ICE gathering state:', pc.iceGatheringState);
     };
 
     pc.onicecandidateerror = (event) => {
@@ -198,19 +263,19 @@ export class P2PManager {
     pc.onicecandidate = (event) => {
       if (event.candidate && this.roomId && this.role) {
         this.sentCandidateCount += 1;
-        console.log('ICE candidate sent:', this.role, this.describeCandidate(event.candidate.toJSON()));
+        debugWebRtc('ICE candidate sent:', this.role, this.describeCandidate(event.candidate.toJSON()));
         void Signaling.addIceCandidate(this.roomId, this.role, event.candidate.toJSON()).catch(
           (error) => {
             console.error('Failed to send ICE candidate to Firestore:', error);
           }
         );
       } else if (!event.candidate) {
-        console.log('ICE candidate gathering complete');
+        debugWebRtc('ICE candidate gathering complete');
       }
     };
 
     pc.ondatachannel = (event) => {
-      console.log('Remote data channel received');
+      debugWebRtc('Remote data channel received');
       this.attachDataChannel(event.channel);
     };
 
@@ -221,7 +286,7 @@ export class P2PManager {
     this.dataChannel = channel;
     this.conn.attachChannel(channel);
     channel.onopen = () => {
-      console.log('Data channel open');
+      debugWebRtc('Data channel open');
       this.notifyConnected();
     };
   }
@@ -264,7 +329,7 @@ export class P2PManager {
         await this.pc.setRemoteDescription(new RTCSessionDescription(state.answer));
         this.remoteDescriptionReady = true;
         this.lastProcessedAnswerSdp = state.answer.sdp;
-        console.log('Answer received');
+        debugWebRtc('Answer received');
         await this.flushPendingCandidates();
       }
 
@@ -280,12 +345,12 @@ export class P2PManager {
       state.offer.sdp !== this.lastProcessedOfferSdp
     ) {
       await this.pc.setRemoteDescription(new RTCSessionDescription(state.offer));
-      console.log('Offer received');
+      debugWebRtc('Offer received');
       const answer = await this.pc.createAnswer();
       await this.pc.setLocalDescription(answer);
       this.remoteDescriptionReady = true;
       this.lastProcessedOfferSdp = state.offer.sdp;
-      console.log('Answer sent');
+      debugWebRtc('Answer sent');
       await Signaling.setAnswer(this.roomId, {
         type: answer.type,
         sdp: answer.sdp,
@@ -309,7 +374,7 @@ export class P2PManager {
     }
 
     if (!this.areDescriptionsReadyForIce()) {
-      console.log('ICE candidate queued until remote description is ready');
+      debugWebRtc('ICE candidate queued until remote description is ready');
       this.pendingCandidates.push(candidate);
       return;
     }
@@ -318,7 +383,7 @@ export class P2PManager {
       this.addedCandidates.add(candidateKey);
       await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
       this.receivedCandidateCount += 1;
-      console.log('ICE candidate received:', this.describeCandidate(candidate));
+      debugWebRtc('ICE candidate received:', this.describeCandidate(candidate));
     } catch (error) {
       this.addedCandidates.delete(candidateKey);
       console.error('Failed to add ICE candidate:', error, candidate);
@@ -347,7 +412,7 @@ export class P2PManager {
     this.pendingCandidates = [];
     const offer = await this.pc.createOffer({ iceRestart: true });
     await this.pc.setLocalDescription(offer);
-    console.log('ICE restart offer sent');
+    debugWebRtc('ICE restart offer sent');
     await Signaling.setOffer(this.roomId, {
       type: offer.type,
       sdp: offer.sdp,
@@ -410,7 +475,7 @@ export class P2PManager {
         }
       }
 
-      console.log('WebRTC diagnostics:', report);
+      debugWebRtc('WebRTC diagnostics:', report);
     } catch (error) {
       console.error('Failed to collect WebRTC diagnostics:', error);
     }

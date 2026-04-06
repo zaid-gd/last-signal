@@ -15,7 +15,7 @@ export interface BreakerPanelProps {
 }
 
 export default function BreakerPanel({ onClose, onSuccess }: BreakerPanelProps) {
-  const target = useMemo(() => CrisisEngine.getBreakerCombo(), []);
+  const target = useMemo(() => CrisisEngine.getActiveBreakerCombo(), []);
   const [states, setStates] = useState<boolean[]>(() => target.map(() => false));
   const [done, setDone] = useState(false);
   const [remainingMs, setRemainingMs] = useState(DURATION_MS);
@@ -28,11 +28,17 @@ export default function BreakerPanel({ onClose, onSuccess }: BreakerPanelProps) 
       const elapsed = now - start;
       const rem = Math.max(0, DURATION_MS - elapsed);
       setRemainingMs(rem);
-      if (rem > 0) raf = requestAnimationFrame(tick);
+      if (rem > 0) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        setTimeout(() => {
+          onClose?.();
+        }, 2000);
+      }
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [done]);
+  }, [done, onClose]);
 
   const checkWin = useCallback(
     (next: boolean[]) => {

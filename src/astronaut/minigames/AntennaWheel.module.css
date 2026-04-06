@@ -108,24 +108,33 @@
 .alignBtn {
   margin-top: 0.5rem;
   width: 100%;
-  padding: 0.55rem;
-  border: 2px solid #00e5ff;
+  padding: 0.65rem;
+  border: 2px solid rgba(0, 229, 255, 0.3);
   border-radius: 4px;
-  background: rgba(0, 229, 255, 0.12);
-  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.05);
+  color: rgba(0, 229, 255, 0.4);
   font-family: inherit;
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
+  font-size: 0.75rem;
+  font-weight: bold;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.alignBtn:not(:disabled) {
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.2);
+  color: #00e5ff;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
 }
 
 .alignBtn:hover:not(:disabled) {
-  background: rgba(0, 229, 255, 0.22);
+  background: rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
 }
 
 .alignBtn:disabled {
-  opacity: 0.35;
   cursor: not-allowed;
 }
 
@@ -164,15 +173,15 @@
   top: 0.5rem;
   right: 0.5rem;
   padding: 0.25rem 0.5rem;
-  border: 1px solid #ff4444;
+  border: 1px solid #00e5ff;
   border-radius: 4px;
-  background: rgba(255, 68, 68, 0.1);
-  color: #ff6666;
+  background: rgba(0, 229, 255, 0.1);
+  color: #00e5ff;
   font-size: 0.65rem;
   cursor: pointer;
   transition: background 0.12s ease;
 }
 
 .exitBtn:hover {
-  background: rgba(255, 68, 68, 0.25);
+  background: rgba(0, 229, 255, 0.25);
 }

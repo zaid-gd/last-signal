@@ -1,13 +1,13 @@
 import { create } from 'zustand';
 
-interface Message {
+export interface Message {
   type: string;
   text: string;
   sentAt: number;
   from: string;
 }
 
-interface SystemHealth {
+export interface SystemHealth {
   hull: number;
   lifeSupport: number;
   power: number;
@@ -15,7 +15,7 @@ interface SystemHealth {
   comms: number;
 }
 
-type SystemKey = keyof SystemHealth;
+export type SystemKey = keyof SystemHealth;
 
 interface GameStore {
   phase: 'lobby' | 'playing' | 'postgame';
@@ -26,14 +26,20 @@ interface GameStore {
   commsDelaySeconds: number;
   /** Currently active mini game, null if none */
   activeMiniGame: SystemKey | null;
+  nearestSystem: SystemKey | null;
+  lastMiniGameClose: number;
+  gameEndReason?: string;
   setPhase: (phase: 'lobby' | 'playing' | 'postgame') => void;
   addMessage: (message: Message) => void;
   setGameTime: (time: number) => void;
   setCommsDelaySeconds: (seconds: number) => void;
   setActiveMiniGame: (miniGame: SystemKey | null) => void;
+  setNearestSystem: (system: SystemKey | null) => void;
+  setGameEndReason: (reason: string) => void;
+  resetMovement: () => void;
 }
 
-export const useGameStore = create<GameStore>((set) => ({
+export const useGameStore = create<GameStore>((set, get) => ({
   phase: 'lobby',
   systemHealth: {
     hull: 100,
@@ -46,10 +52,24 @@ export const useGameStore = create<GameStore>((set) => ({
   gameTime: 0,
   commsDelaySeconds: 10,
   activeMiniGame: null,
+  nearestSystem: null,
+  lastMiniGameClose: 0,
+  gameEndReason: undefined,
   setPhase: (phase) => set({ phase }),
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
   setGameTime: (time) => set({ gameTime: time }),
   setCommsDelaySeconds: (seconds) =>
     set({ commsDelaySeconds: Math.max(5, Math.min(120, Math.round(seconds))) }),
-  setActiveMiniGame: (miniGame) => set({ activeMiniGame: miniGame }),
+  setActiveMiniGame: (miniGame) => {
+    const current = get().activeMiniGame;
+    // If closing, record the time
+    if (current && !miniGame) {
+      set({ activeMiniGame: null, lastMiniGameClose: Date.now() });
+    } else {
+      set({ activeMiniGame: miniGame });
+    }
+  },
+  setNearestSystem: (system) => set({ nearestSystem: system }),
+  setGameEndReason: (reason) => set({ gameEndReason: reason }),
+  resetMovement: () => set({}),
 }));

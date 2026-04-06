@@ -113,12 +113,14 @@ const CRISIS_TIMELINE: CrisisEvent[] = [
 interface CrisisUpdate {
   newEvents: CrisisEvent[];
   hints: string[];
+  upcomingEvents: { event: CrisisEvent, timeToTrigger: number }[];
+  activeEvents: CrisisEvent[];
   activeDecays: Record<SystemKey, number>;
 }
 
 let activeEvents: CrisisEvent[] = [];
 let gameStartTime = 0;
-let fixedEventIds = new Set<string>();
+const fixedEventIds = new Set<string>();
 
 export const CrisisEngine = {
   start(startTime: number) {
@@ -132,6 +134,8 @@ export const CrisisEngine = {
     const update: CrisisUpdate = {
       newEvents: [],
       hints: [],
+      upcomingEvents: [],
+      activeEvents: activeEvents,
       activeDecays: {
         hull: 0,
         lifeSupport: 0,
@@ -144,8 +148,10 @@ export const CrisisEngine = {
     CRISIS_TIMELINE.forEach(event => {
       // Hints show 15s before trigger
       if (elapsed >= event.triggerTime - 15 && elapsed < event.triggerTime && !fixedEventIds.has(event.id)) {
+        const timeToTrigger = Math.ceil(event.triggerTime - elapsed);
+        update.upcomingEvents.push({ event, timeToTrigger });
         if (!update.hints.includes(event.mcHintText)) {
-          update.hints.push(`[UPCOMING in ${Math.ceil(event.triggerTime - elapsed)}s] ${event.mcHintText}`);
+          update.hints.push(`[UPCOMING in ${timeToTrigger}s] ${event.mcHintText}`);
         }
       }
 
@@ -168,6 +174,15 @@ export const CrisisEngine = {
   reportFixed(eventId: string): void {
     fixedEventIds.add(eventId);
     activeEvents = activeEvents.filter(e => e.id !== eventId);
+  },
+
+  reportFixedForSystem(system: SystemKey): void {
+    const fixedIds = activeEvents
+      .filter(event => event.system === system)
+      .map(event => event.id);
+
+    fixedIds.forEach(eventId => fixedEventIds.add(eventId));
+    activeEvents = activeEvents.filter(event => event.system !== system);
   },
 
   getNavigationCode(eventId: string = 'nav-1'): string {
@@ -193,5 +208,34 @@ export const CrisisEngine = {
   getBreakerCombo(eventId: string = 'pwr-1'): boolean[] {
     const event = CRISIS_TIMELINE.find(e => e.id === eventId);
     return event?.breakerCombo || [false, false, false, false, false, false];
+  },
+
+  getActiveEventForSystem(system: SystemKey): CrisisEvent | undefined {
+    return activeEvents.find(event => event.system === system);
+  },
+
+  getActiveEvents(): CrisisEvent[] {
+    return [...activeEvents];
+  },
+
+  getUpcomingEvents(now: number): { event: CrisisEvent, timeToTrigger: number }[] {
+    const elapsed = (now - gameStartTime) / 1000;
+
+    return CRISIS_TIMELINE.flatMap(event => {
+      if (
+        elapsed >= event.triggerTime - 15 &&
+        elapsed < event.triggerTime &&
+        !fixedEventIds.has(event.id)
+      ) {
+        return [{ event, timeToTrigger: Math.ceil(event.triggerTime - elapsed) }];
+      }
+
+      return [];
+    });
+  },
+
+  getActiveBreakerCombo(): boolean[] {
+    const event = activeEvents.find(activeEvent => activeEvent.system === 'power' && activeEvent.breakerCombo);
+    return event?.breakerCombo ?? this.getBreakerCombo();
   }
 };

@@ -1,23 +1,34 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { PerspectiveCamera } from '@react-three/drei';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { PerspectiveCamera, PointerLockControls } from '@react-three/drei';
+import { useEffect, useMemo, useRef } from 'react';
 import React from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../stores/useGameStore';
+import {
+  clearActiveShipCameraControls,
+  setActiveShipCameraControls,
+  type PointerLockControlsHandle,
+} from './shipCameraControl';
 
-const CORRIDOR = { width: 4, height: 3, length: 20 } as const;
-const WALL_COLOR = '#1a1f2e';
-const FLOOR_COLOR = '#0f1218';
-const CEILING_COLOR = '#0d1018';
-const PANEL_RECESS_COLOR = '#0d1525';
-const BEAM_COLOR = '#151c2a';
+const CORRIDOR = { width: 3.5, height: 2.8, length: 24 } as const;
+const WALL_COLOR = '#0a0c10';
+const FLOOR_COLOR = '#050608';
+const METAL_COLOR = '#15181c';
 
-const PANEL_POSITIONS = [
-  { key: 'hull' as const, position: [-2, 1.2, -3], rotation: [0, Math.PI / 2, 0] },
-  { key: 'lifeSupport' as const, position: [2, 1.2, -7], rotation: [0, -Math.PI / 2, 0] },
-  { key: 'power' as const, position: [-2, 1.2, -11], rotation: [0, Math.PI / 2, 0] },
-  { key: 'navigation' as const, position: [2, 1.2, -15], rotation: [0, -Math.PI / 2, 0] },
-  { key: 'comms' as const, position: [-2, 1.2, -19], rotation: [0, Math.PI / 2, 0] },
+type Vector3Tuple = [number, number, number];
+
+interface PanelConfig {
+  key: 'hull' | 'lifeSupport' | 'power' | 'navigation' | 'comms';
+  position: Vector3Tuple;
+  rotation: Vector3Tuple;
+}
+
+const PANEL_POSITIONS: PanelConfig[] = [
+  { key: 'hull' as const, position: [-1.7, 1.3, -4], rotation: [0, Math.PI / 2, 0] },
+  { key: 'lifeSupport' as const, position: [1.7, 1.3, -8], rotation: [0, -Math.PI / 2, 0] },
+  { key: 'power' as const, position: [-1.7, 1.3, -12], rotation: [0, Math.PI / 2, 0] },
+  { key: 'navigation' as const, position: [1.7, 1.3, -16], rotation: [0, -Math.PI / 2, 0] },
+  { key: 'comms' as const, position: [-1.7, 1.3, -20], rotation: [0, Math.PI / 2, 0] },
 ];
 
 type SystemKey = (typeof PANEL_POSITIONS)[number]['key'];
@@ -29,499 +40,332 @@ function healthToStatusColor(health: number): string {
 }
 
 function Corridor() {
-  const wallMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: WALL_COLOR,
-        metalness: 0.3,
-        roughness: 0.8,
-        emissive: '#000000',
-      }),
-    []
-  );
+  const wallMat = useMemo(() => new THREE.MeshStandardMaterial({ color: WALL_COLOR, metalness: 0.25, roughness: 0.88 }), []);
+  const floorMat = useMemo(() => new THREE.MeshStandardMaterial({ color: FLOOR_COLOR, metalness: 0.25, roughness: 0.88 }), []);
+  const ribMat = useMemo(() => new THREE.MeshStandardMaterial({ color: METAL_COLOR, metalness: 0.25, roughness: 0.88 }), []);
+  const pipeMat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#202530', metalness: 0.25, roughness: 0.88 }), []);
 
-  const ceilingMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: CEILING_COLOR,
-        metalness: 0.1,
-        roughness: 0.9,
-        emissive: '#000000',
-      }),
-    []
-  );
+  const ribs = useMemo(() => {
+    const arr = [];
+    for (let z = -CORRIDOR.length + 2; z <= 0; z += 4) arr.push(z);
+    return arr;
+  }, []);
 
-  const floorMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: FLOOR_COLOR,
-        metalness: 0.1,
-        roughness: 0.9,
-        emissive: '#000000',
-      }),
-    []
-  );
-
-  const recessMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: PANEL_RECESS_COLOR,
-        metalness: 0.2,
-        roughness: 0.85,
-        emissive: '#000000',
-      }),
-    []
-  );
-
-  const beamMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: BEAM_COLOR,
-        metalness: 0.3,
-        roughness: 0.75,
-        emissive: '#000000',
-      }),
-    []
-  );
-
-  const gridMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: '#1a2030',
-        emissive: '#001122',
-        emissiveIntensity: 0.15,
-        metalness: 0.1,
-        roughness: 0.95,
-      }),
-    []
-  );
-
-  const hw = CORRIDOR.width / 2;
-  const t = 0.1;
-
-  // Recessed panel positions every 4 units along corridor
-  const recessZ = [-8, -4, 0, 4, 8];
-  // Ceiling beam positions every 4 units
-  const beamZ = [-8, -4, 0, 4, 8];
-  // Floor grid lines every 1 unit
-  const gridZ = Array.from({ length: 21 }, (_, i) => -10 + i);
+  const gridLines = useMemo(() => {
+    const arr = [];
+    for (let z = -CORRIDOR.length; z <= 0; z += 1.5) arr.push(z);
+    return arr;
+  }, []);
 
   return (
     <group>
-      {/* Main floor */}
-      <mesh position={[0, -t / 2, 0]} material={floorMat}>
-        <boxGeometry args={[CORRIDOR.width, t, CORRIDOR.length]} />
+      <mesh position={[0, 0, -CORRIDOR.length / 2]} rotation={[-Math.PI / 2, 0, 0]} material={floorMat}>
+        <planeGeometry args={[CORRIDOR.width, CORRIDOR.length]} />
       </mesh>
-
-      {/* Floor grid lines */}
-      {gridZ.map((z) => (
-        <mesh key={`grid-${z}`} position={[0, 0.01, z]} material={gridMat}>
-          <boxGeometry args={[CORRIDOR.width, 0.02, 0.03]} />
+      {gridLines.map((z, i) => (
+        <mesh key={`grid-${i}`} position={[0, 0.01, z]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[CORRIDOR.width, 0.05]} />
+          <meshStandardMaterial color="#111" />
         </mesh>
       ))}
-
-      {/* Main ceiling */}
-      <mesh position={[0, CORRIDOR.height + t / 2, 0]} material={ceilingMat}>
-        <boxGeometry args={[CORRIDOR.width, t, CORRIDOR.length]} />
+      <mesh position={[0, CORRIDOR.height, -CORRIDOR.length / 2]} rotation={[Math.PI / 2, 0, 0]} material={floorMat}>
+        <planeGeometry args={[CORRIDOR.width, CORRIDOR.length]} />
       </mesh>
-
-      {/* Ceiling beams */}
-      {beamZ.map((z) => (
-        <mesh key={`beam-${z}`} position={[0, CORRIDOR.height - 0.075, z]} material={beamMat}>
-          <boxGeometry args={[CORRIDOR.width + 0.2, 0.15, 0.2]} />
-        </mesh>
-      ))}
-
-      {/* Left wall */}
-      <mesh position={[-hw - t / 2, CORRIDOR.height / 2, 0]} material={wallMat}>
-        <boxGeometry args={[t, CORRIDOR.height, CORRIDOR.length]} />
+      <mesh position={[-CORRIDOR.width / 2, CORRIDOR.height / 2, -CORRIDOR.length / 2]} rotation={[0, Math.PI / 2, 0]} material={wallMat}>
+        <planeGeometry args={[CORRIDOR.length, CORRIDOR.height]} />
       </mesh>
-
-      {/* Right wall */}
-      <mesh position={[hw + t / 2, CORRIDOR.height / 2, 0]} material={wallMat}>
-        <boxGeometry args={[t, CORRIDOR.height, CORRIDOR.length]} />
+      <mesh position={[CORRIDOR.width / 2, CORRIDOR.height / 2, -CORRIDOR.length / 2]} rotation={[0, -Math.PI / 2, 0]} material={wallMat}>
+        <planeGeometry args={[CORRIDOR.length, CORRIDOR.height]} />
       </mesh>
-
-      {/* Recessed wall panels - left */}
-      {recessZ.map((z) => (
-        <mesh key={`recess-left-${z}`} position={[-hw + 0.05, CORRIDOR.height / 2, z]} material={recessMat}>
-          <boxGeometry args={[0.1, 2.5, 0.8]} />
-        </mesh>
+      {ribs.map((z, i) => (
+        <group key={`rib-${i}`} position={[0, CORRIDOR.height / 2, z]}>
+          <mesh position={[-CORRIDOR.width / 2 + 0.05, 0, 0]} material={ribMat}>
+            <boxGeometry args={[0.2, CORRIDOR.height, 0.3]} />
+          </mesh>
+          <mesh position={[CORRIDOR.width / 2 - 0.05, 0, 0]} material={ribMat}>
+            <boxGeometry args={[0.2, CORRIDOR.height, 0.3]} />
+          </mesh>
+          <mesh position={[0, CORRIDOR.height / 2 - 0.05, 0]} material={ribMat}>
+            <boxGeometry args={[CORRIDOR.width, 0.2, 0.3]} />
+          </mesh>
+        </group>
       ))}
-
-      {/* Recessed wall panels - right */}
-      {recessZ.map((z) => (
-        <mesh key={`recess-right-${z}`} position={[hw - 0.05, CORRIDOR.height / 2, z]} material={recessMat}>
-          <boxGeometry args={[0.1, 2.5, 0.8]} />
+      <mesh position={[-CORRIDOR.width / 2 + 0.15, 0.4, -CORRIDOR.length / 2]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.08, 0.08, CORRIDOR.length, 8]} />
+        <meshStandardMaterial color="#202530" metalness={0.25} roughness={0.88} />
+      </mesh>
+      <mesh position={[0.5, CORRIDOR.height - 0.15, -CORRIDOR.length / 2]} material={pipeMat}>
+        <boxGeometry args={[0.4, 0.1, CORRIDOR.length]} />
+      </mesh>
+      <group position={[CORRIDOR.width / 2 - 0.01, 1.6, -10]}>
+        <mesh rotation={[0, -Math.PI / 2, 0]}>
+          <circleGeometry args={[0.3, 32]} />
+          <meshStandardMaterial color="#000" emissive="#050810" />
         </mesh>
-      ))}
+      </group>
+      <group position={[CORRIDOR.width / 2 - 0.01, 1.6, -18]}>
+        <mesh rotation={[0, -Math.PI / 2, 0]}>
+          <circleGeometry args={[0.3, 32]} />
+          <meshStandardMaterial color="#000" emissive="#050810" />
+        </mesh>
+      </group>
+      <group position={[0, CORRIDOR.height / 2, -CORRIDOR.length + 0.1]}>
+        <mesh material={ribMat}>
+          <boxGeometry args={[2, 2.4, 0.2]} />
+        </mesh>
+        <mesh position={[0, 0, 0.11]} material={wallMat}>
+          <boxGeometry args={[1.8, 2.2, 0.05]} />
+        </mesh>
+      </group>
     </group>
   );
 }
 
-function SystemPanel({
-  config,
-  onClick,
-}: {
-  config: { key: SystemKey; position: number[]; rotation: number[] };
-  onClick: () => void;
-}) {
+function SystemPanel({ config }: { config: PanelConfig }) {
   const { key: sysKey, position, rotation } = config;
   const statusRef = useRef<THREE.MeshStandardMaterial>(null);
+  const statusColor = useMemo(() => new THREE.Color(), []);
 
   useFrame(() => {
     const health = useGameStore.getState().systemHealth[sysKey];
-    const c = healthToStatusColor(health);
-    const col = new THREE.Color(c);
+    statusColor.set(healthToStatusColor(health));
     if (statusRef.current) {
-      statusRef.current.color.copy(col);
-      statusRef.current.emissive.copy(col);
-      statusRef.current.emissiveIntensity = health < 50 ? 1.2 : 0.6;
+      statusRef.current.color.copy(statusColor);
+      statusRef.current.emissive.copy(statusColor);
+      statusRef.current.emissiveIntensity = health < 50 ? 1.5 : 0.8;
     }
   });
 
-  const [px, py, pz] = position;
-  const [rx, ry, rz] = rotation;
-
   return (
-    <group position={[px, py, pz]} rotation={[rx, ry, rz]}>
-      {/* Clickable panel face */}
-      <mesh onClick={onClick}>
-        <boxGeometry args={[1.8, 1.4, 0.08]} />
-        <meshStandardMaterial color="#0d1520" metalness={0.2} roughness={0.85} emissive="#000000" />
+    <group position={position} rotation={rotation}>
+      <mesh>
+        <boxGeometry args={[1.2, 1, 0.1]} />
+        <meshStandardMaterial color="#1a1c20" metalness={0.7} roughness={0.4} />
       </mesh>
-
-      {/* Screen/label area */}
-      <mesh position={[0, 0.3, 0.05]}>
-        <boxGeometry args={[1.2, 0.4, 0.02]} />
-        <meshStandardMaterial color="#001133" metalness={0.1} roughness={0.9} emissive="#000000" />
+      <mesh position={[0, 0.1, 0.06]}>
+        <boxGeometry args={[0.9, 0.5, 0.02]} />
+        <meshStandardMaterial color="#050810" emissive="#001122" emissiveIntensity={0.5} />
       </mesh>
-
-      {/* 4 indicator buttons - 2x2 grid */}
-      {[
-        [-0.4, -0.2],
-        [0.4, -0.2],
-        [-0.4, -0.5],
-        [0.4, -0.5],
-      ].map(([bx, by], i) => (
-        <mesh key={i} position={[bx, by, 0.05]}>
-          <boxGeometry args={[0.15, 0.15, 0.05]} />
-          <meshStandardMaterial color="#1a2535" metalness={0.2} roughness={0.8} emissive="#000000" />
-        </mesh>
-      ))}
-
-      {/* Status light above panel */}
-      <mesh position={[0, 0.9, 0]}>
-        <sphereGeometry args={[0.08, 16, 16]} />
-        <meshStandardMaterial
-          ref={statusRef}
-          color="#00ff44"
-          emissive="#00ff44"
-          emissiveIntensity={0.6}
-          metalness={0.1}
-          roughness={0.3}
-        />
+      <group position={[0, -0.3, 0.06]}>
+        {[[-0.3, 0], [0, 0], [0.3, 0]].map((p, i) => (
+          <mesh key={i} position={[p[0], p[1], 0]}>
+            <boxGeometry args={[0.15, 0.15, 0.02]} />
+            <meshStandardMaterial color="#222" />
+          </mesh>
+        ))}
+      </group>
+      <mesh position={[0, 0.6, 0]}>
+        <sphereGeometry args={[0.06, 16, 16]} />
+        <meshStandardMaterial ref={statusRef} metalness={0.1} roughness={0.2} />
       </mesh>
     </group>
   );
 }
 
 function ShipLights() {
-  const emergency1 = useRef<THREE.PointLight>(null);
-  const emergency2 = useRef<THREE.PointLight>(null);
-  const clock = useRef(0);
+  const emergencyRefs = useRef<(THREE.PointLight | null)[]>([]);
+  const { scene } = useThree();
+
+  const spot1Ref = useRef<THREE.SpotLight>(null);
+  const spot2Ref = useRef<THREE.SpotLight>(null);
+  const spot3Ref = useRef<THREE.SpotLight>(null);
+  const spot4Ref = useRef<THREE.SpotLight>(null);
+
+  const emergencyPositions = useMemo<Vector3Tuple[]>(() => [
+    [-1.7, 2.3, -2], [1.7, 2.3, -5],
+    [-1.7, 2.3, -8], [1.7, 2.3, -11],
+    [-1.7, 2.3, -14], [1.7, 2.3, -17],
+    [-1.7, 2.3, -20], [1.7, 2.3, -23]
+  ], []);
+
+  useEffect(() => {
+    if (spot1Ref.current) { spot1Ref.current.target.position.set(0, 0, -2); scene.add(spot1Ref.current.target); }
+    if (spot2Ref.current) { spot2Ref.current.target.position.set(0, 0, -7); scene.add(spot2Ref.current.target); }
+    if (spot3Ref.current) { spot3Ref.current.target.position.set(0, 0, -13); scene.add(spot3Ref.current.target); }
+    if (spot4Ref.current) { spot4Ref.current.target.position.set(0, 0, -18); scene.add(spot4Ref.current.target); }
+  }, [scene]);
 
   useFrame((state) => {
-    clock.current = state.clock.elapsedTime;
     const { systemHealth } = useGameStore.getState();
+    const danger = systemHealth.hull < 50 || systemHealth.power < 50 || systemHealth.lifeSupport < 40;
 
-    // Emergency lights pulse when hull < 50 or power < 50
-    const emergencyActive = systemHealth.hull < 50 || systemHealth.power < 50;
-    const pulseIntensity = emergencyActive ? Math.sin(clock.current * 3) * 0.5 + 0.8 : 0;
-
-    if (emergency1.current) emergency1.current.intensity = pulseIntensity;
-    if (emergency2.current) emergency2.current.intensity = pulseIntensity;
+    if (danger) {
+      const pulse = (Math.sin(state.clock.elapsedTime * 4) * 0.5 + 0.5) * 5.0;
+      emergencyRefs.current.forEach(ref => {
+        if (ref) ref.intensity = pulse;
+      });
+    } else {
+      emergencyRefs.current.forEach(ref => {
+        if (ref) ref.intensity = 0;
+      });
+    }
   });
 
   return (
     <>
-      <ambientLight color="#112233" intensity={0.3} />
+      {/* Ambient — increased for better visibility */}
+      <ambientLight color="#0a1520" intensity={0.45} />
 
-      {/* Four ceiling point lights */}
-      <pointLight position={[0, 2.5, -2]} color="#334477" intensity={0.8} distance={6} decay={2} />
-      <pointLight position={[0, 2.5, -7]} color="#334477" intensity={0.8} distance={6} decay={2} />
-      <pointLight position={[0, 2.5, -12]} color="#334477" intensity={0.8} distance={6} decay={2} />
-      <pointLight position={[0, 2.5, -17]} color="#334477" intensity={0.8} distance={6} decay={2} />
+      {/* Four ceiling strip lights — cool blue-white, tight cones, increased intensity */}
+      <spotLight ref={spot1Ref} position={[0, 2.85, -2]} color="#b8d4e8" intensity={18} angle={0.3} penumbra={0.6} distance={8} decay={1.5} castShadow={false} />
+      <spotLight ref={spot2Ref} position={[0, 2.85, -7]} color="#a0c0dd" intensity={16} angle={0.3} penumbra={0.6} distance={8} decay={1.5} />
+      <spotLight ref={spot3Ref} position={[0, 2.85, -13]} color="#a0c0dd" intensity={16} angle={0.3} penumbra={0.6} distance={8} decay={1.5} />
+      <spotLight ref={spot4Ref} position={[0, 2.85, -18]} color="#8ab0cc" intensity={14} angle={0.3} penumbra={0.7} distance={8} decay={1.5} />
 
-      {/* Emergency lights - initially off, pulse when critical */}
-      <pointLight ref={emergency1} position={[-1.5, 2, -5]} color="#ff2222" intensity={0} distance={8} decay={1.5} />
-      <pointLight ref={emergency2} position={[1.5, 2, -14]} color="#ff2222" intensity={0} distance={8} decay={1.5} />
+      {/* Emergency lights — RED, managed by refs in useFrame */}
+      {emergencyPositions.map((pos, i) => (
+        <pointLight
+          key={i}
+          ref={el => emergencyRefs.current[i] = el}
+          position={pos}
+          color="#ff1500"
+          intensity={0}
+          distance={10}
+          decay={1.5}
+        />
+      ))}
+
+      {/* Subtle warm panel glow — one per system panel position, increased slightly */}
+      <pointLight position={[-1.6, 1.3, -3]}  color="#002244" intensity={0.8} distance={3} decay={2} />
+      <pointLight position={[ 1.6, 1.3, -7]}  color="#002244" intensity={0.8} distance={3} decay={2} />
+      <pointLight position={[-1.6, 1.3, -11]} color="#002244" intensity={0.8} distance={3} decay={2} />
+      <pointLight position={[ 1.6, 1.3, -15]} color="#002244" intensity={0.8} distance={3} decay={2} />
+      <pointLight position={[-1.6, 1.3, -19]} color="#002244" intensity={0.8} distance={3} decay={2} />
     </>
-  );
-}
-
-function InteractionHint() {
-  const [hint, setHint] = useState<SystemKey | null>(null);
-  const { activeMiniGame } = useGameStore();
-  const camera = useThree((state) => state.camera);
-  const interactionDistance = 1.5;
-
-  useFrame(() => {
-    const cameraPos = camera.position;
-
-    let closestPanel: typeof PANEL_POSITIONS[0] | null = null;
-    let closestDistance = Infinity;
-
-    for (const panel of PANEL_POSITIONS) {
-      const [px, _, pz] = panel.position;
-      const distance = Math.sqrt(
-        Math.pow(cameraPos.x - px, 2) +
-        Math.pow(cameraPos.z - pz, 2)
-      );
-
-      if (distance < interactionDistance && distance < closestDistance) {
-        closestDistance = distance;
-        closestPanel = panel;
-      }
-    }
-
-    if (closestPanel && !activeMiniGame) {
-      setHint(closestPanel.key);
-    } else {
-      setHint(null);
-    }
-  });
-
-  if (!hint) return null;
-
-  const hintText = `Press E to open ${hint.toUpperCase()} panel`;
-
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        background: 'rgba(0, 0, 0, 0.8)',
-        color: '#00ff41',
-        padding: '8px 16px',
-        borderRadius: '4px',
-        border: '1px solid #00ff41',
-        fontSize: '14px',
-        fontFamily: 'monospace',
-        pointerEvents: 'none',
-        zIndex: 1000,
-      }}
-    >
-      {hintText}
-    </div>
   );
 }
 
 function CameraRig({ lookEnabled }: { lookEnabled: boolean }) {
-  const group = useRef<THREE.Group>(null);
-  const yaw = useRef(0);
-  const dragging = useRef(false);
-  const lookEnabledRef = useRef(lookEnabled);
-  lookEnabledRef.current = lookEnabled;
-  const { gl } = useThree();
-
-  // Camera starts at [0, 1.6, 0] looking toward z=-1
-  const position = useRef({ x: 0, z: 0 });
-  const velocity = useRef({ x: 0, z: 0 });
-  const keys = useRef({ w: false, a: false, s: false, d: false, e: false });
-  const lastInteractionTime = useRef(0);
-
-  const moveSpeed = 0.04;
-  const friction = 0.85;
-  const interactionDistance = 1.5;
-  const interactionCooldown = 1000;
-
-  useEffect(() => {
-    if (!lookEnabled && document.pointerLockElement === gl.domElement) {
-      document.exitPointerLock();
-    }
-  }, [lookEnabled, gl]);
+  const { camera } = useThree();
+  const activeMiniGame = useGameStore((s) => s.activeMiniGame);
+  const setNearestSystem = useGameStore((s) => s.setNearestSystem);
+  const pointerLockControlsRef = useRef<PointerLockControlsHandle | null>(null);
+  const moveState = useRef({ forward: false, backward: false, left: false, right: false, e: false });
+  const velocity = useRef(new THREE.Vector3());
+  const position = useRef(new THREE.Vector3(0, 1.6, -1));
+  const direction = useRef(new THREE.Vector3());
+  const front = useRef(new THREE.Vector3());
+  const side = useRef(new THREE.Vector3());
+  const nearestRef = useRef<SystemKey | null>(null);
+  const lastE = useRef(0);
+  const panelTargets = useMemo(
+    () => PANEL_POSITIONS.map(panel => ({
+      key: panel.key,
+      target: new THREE.Vector3(panel.position[0], 1.6, panel.position[2]),
+    })),
+    []
+  );
 
   useEffect(() => {
-    const el = gl.domElement;
-
-    const onMouseDown = () => {
-      if (!lookEnabledRef.current) return;
-      dragging.current = true;
-    };
-    const onMouseUp = () => {
-      dragging.current = false;
-    };
-    const onMove = (e: MouseEvent) => {
-      if (!lookEnabledRef.current) return;
-      const locked = document.pointerLockElement === el;
-      if (locked || dragging.current) {
-        yaw.current -= e.movementX * 0.00075;
-      }
-    };
-    const onClick = () => {
-      if (!lookEnabledRef.current) return;
-      el.requestPointerLock();
-    };
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!lookEnabledRef.current) return;
-      const key = e.key.toLowerCase();
-      if (key in keys.current) {
-        keys.current[key as keyof typeof keys.current] = true;
-        e.preventDefault();
-      }
-    };
-
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (!lookEnabledRef.current) return;
-      const key = e.key.toLowerCase();
-      if (key in keys.current) {
-        keys.current[key as keyof typeof keys.current] = false;
-        e.preventDefault();
-      }
-    };
-
-    el.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mouseup', onMouseUp);
-    document.addEventListener('mousemove', onMove);
-    el.addEventListener('click', onClick);
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-
     return () => {
-      el.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mouseup', onMouseUp);
-      document.removeEventListener('mousemove', onMove);
-      el.removeEventListener('click', onClick);
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
+      clearActiveShipCameraControls(pointerLockControlsRef.current);
     };
-  }, [gl]);
+  }, []);
 
-  useFrame(() => {
-    // Gate movement when mini-game is active
-    const { activeMiniGame } = useGameStore.getState();
-    if (activeMiniGame) return;
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (k === 'w') moveState.current.forward = true;
+      if (k === 's') moveState.current.backward = true;
+      if (k === 'a') moveState.current.left = true;
+      if (k === 'd') moveState.current.right = true;
+      if (k === 'e') moveState.current.e = true;
+    };
+    const up = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (k === 'w') moveState.current.forward = false;
+      if (k === 's') moveState.current.backward = false;
+      if (k === 'a') moveState.current.left = false;
+      if (k === 'd') moveState.current.right = false;
+      if (k === 'e') moveState.current.e = false;
+    };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup',   up);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup',   up); };
+  }, []);
 
-    // Get camera forward and right vectors
-    const forward = new THREE.Vector3(0, 0, -1);
-    const right = new THREE.Vector3(1, 0, 0);
-
-    // Rotate these vectors based on camera yaw
-    forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw.current);
-    right.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw.current);
-
-    // Calculate movement based on input
-    let moveX = 0;
-    let moveZ = 0;
-
-    if (keys.current.w) {
-      moveX += forward.x * moveSpeed;
-      moveZ += forward.z * moveSpeed;
-    }
-    if (keys.current.s) {
-      moveX -= forward.x * moveSpeed;
-      moveZ -= forward.z * moveSpeed;
-    }
-    if (keys.current.a) {
-      moveX -= right.x * moveSpeed;
-      moveZ -= right.z * moveSpeed;
-    }
-    if (keys.current.d) {
-      moveX += right.x * moveSpeed;
-      moveZ += right.z * moveSpeed;
-    }
-
-    // Apply movement to velocity with lerp smoothing
-    velocity.current.x += (moveX - velocity.current.x) * 0.1;
-    velocity.current.z += (moveZ - velocity.current.z) * 0.1;
-
-    // Apply friction
-    velocity.current.x *= friction;
-    velocity.current.z *= friction;
-
-    // Update position
-    position.current.x += velocity.current.x;
-    position.current.z += velocity.current.z;
-
-    // Constrain to corridor bounds - allow full corridor movement
-    const maxX = 1.8;
-    const minZ = -19; // Back of corridor (near comms panel)
-    const maxZ = -1;  // Front of corridor (near start)
-    position.current.x = Math.max(-maxX, Math.min(maxX, position.current.x));
-    position.current.z = Math.max(minZ, Math.min(maxZ, position.current.z));
-
-    // Check for panel interactions with 'E' key
-    const currentTime = Date.now();
-    if (keys.current.e && currentTime - lastInteractionTime.current > interactionCooldown) {
-      const { setActiveMiniGame } = useGameStore.getState();
-
-      // Check if near any panel
-      for (const panel of PANEL_POSITIONS) {
-        const [px, _, pz] = panel.position;
-        const distance = Math.sqrt(
-          Math.pow(position.current.x - px, 2) + Math.pow(position.current.z - pz, 2)
-        );
-
-        if (distance < interactionDistance) {
-          setActiveMiniGame(panel.key);
-          lastInteractionTime.current = currentTime;
-          break;
-        }
+  useFrame((_, delta) => {
+    // Calculate nearest system for HUD
+    let close: SystemKey | null = null;
+    let minDist = 1.8;
+    panelTargets.forEach(p => {
+      const dist = position.current.distanceTo(p.target);
+      if (dist < minDist) {
+        minDist = dist;
+        close = p.key;
       }
+    });
+    if (nearestRef.current !== close) {
+      nearestRef.current = close;
+      setNearestSystem(close);
     }
 
-    if (group.current) {
-      group.current.rotation.y = yaw.current;
-      group.current.position.x = position.current.x;
-      // Fixed height at 1.6, z position moves but camera looks toward z=-1
-      group.current.position.y = 1.6;
-      group.current.position.z = position.current.z;
+    if (!lookEnabled || activeMiniGame) {
+      velocity.current.set(0, 0, 0);
+      return;
+    }
+    const speed = 40;
+    const friction = 10;
+    direction.current.set(0, 0, 0);
+    front.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    side.current.set(1, 0, 0).applyQuaternion(camera.quaternion);
+    front.current.y = 0; side.current.y = 0; front.current.normalize(); side.current.normalize();
+    if (moveState.current.forward) direction.current.add(front.current);
+    if (moveState.current.backward) direction.current.sub(front.current);
+    if (moveState.current.left) direction.current.sub(side.current);
+    if (moveState.current.right) direction.current.add(side.current);
+    direction.current.normalize();
+    velocity.current.addScaledVector(direction.current, speed * delta);
+    velocity.current.addScaledVector(velocity.current, -friction * delta);
+    position.current.addScaledVector(velocity.current, delta);
+    position.current.x = THREE.MathUtils.clamp(position.current.x, -CORRIDOR.width / 2 + 0.6, CORRIDOR.width / 2 - 0.6);
+    position.current.z = THREE.MathUtils.clamp(position.current.z, -CORRIDOR.length + 1.5, -0.5);
+    camera.position.copy(position.current);
+    if (moveState.current.e && Date.now() - lastE.current > 500) {
+      const { activeMiniGame, lastMiniGameClose, setActiveMiniGame } = useGameStore.getState();
+      // 500ms cooldown after close
+      if (!activeMiniGame && Date.now() - lastMiniGameClose > 500) {
+        panelTargets.forEach(p => {
+          const dist = position.current.distanceTo(p.target);
+          if (dist < 1.5) {
+            lastE.current = Date.now();
+            setActiveMiniGame(p.key);
+          }
+        });
+      }
     }
   });
 
   return (
-    <group ref={group} position={[0, 1.6, 0]} rotation={[0, 0, 0]}>
-      <PerspectiveCamera makeDefault fov={58} near={0.08} far={120} />
-    </group>
-  );
-}
-
-function ShipScene({ lookEnabled }: { lookEnabled: boolean }) {
-  const { setActiveMiniGame } = useGameStore();
-
-  return (
     <>
-      <color attach="background" args={['#05070c']} />
-      <fog attach="fog" args={['#05070c', 8, 25]} />
-      <ShipLights />
-      <Corridor />
-      {PANEL_POSITIONS.map((cfg) => (
-        <SystemPanel key={cfg.key} config={cfg} onClick={() => setActiveMiniGame(cfg.key)} />
-      ))}
-      <CameraRig lookEnabled={lookEnabled} />
-      <InteractionHint />
+      <PerspectiveCamera makeDefault fov={75} position={[0, 1.6, -1]} />
+      <PointerLockControls
+        ref={(controls) => {
+          const nextControls = controls as PointerLockControlsHandle | null;
+          pointerLockControlsRef.current = nextControls;
+          setActiveShipCameraControls(nextControls);
+        }}
+        enabled={lookEnabled && !activeMiniGame}
+      />
     </>
   );
 }
 
-export default function ShipCanvas({
-  className,
-  style,
-  lookEnabled = true,
-}: {
-  className?: string;
-  style?: React.CSSProperties;
-  /** When false (e.g. chat input focused), mouse look and pointer lock are disabled */
-  lookEnabled?: boolean;
-}) {
+export default function ShipCanvas({ style, lookEnabled = true }: { style?: React.CSSProperties; lookEnabled?: boolean }) {
   return (
-    <div className={className} style={{ width: '100%', height: '100%', touchAction: 'none', ...style }}>
-      <Canvas gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}>
-        <ShipScene lookEnabled={lookEnabled} />
+    <div style={{ ...style, width: '100%', height: '100%' }}>
+      <Canvas shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}>
+        <color attach="background" args={['#020204']} />
+        <fog attach="fog" args={['#020204', 5, 20]} />
+        <ShipLights />
+        <Corridor />
+        {PANEL_POSITIONS.map((cfg) => (
+          <SystemPanel
+            key={cfg.key}
+            config={cfg}
+          />
+        ))}
+        <CameraRig lookEnabled={lookEnabled} />
       </Canvas>
     </div>
   );

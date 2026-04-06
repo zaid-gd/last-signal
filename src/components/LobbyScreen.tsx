@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useConnectionStore } from '../stores/useConnectionStore';
 import { useGameStore } from '../stores/useGameStore';
-import { GameLoop } from '../game/GameLoop';
 
 export default function LobbyScreen() {
   const [joinCode, setJoinCode] = useState('');
@@ -30,7 +29,6 @@ export default function LobbyScreen() {
   const selectRole = (selectedRole: 'astronaut' | 'missionControl') => {
     setRole(selectedRole);
     setPhase('playing');
-    GameLoop.start();
   };
 
   return (

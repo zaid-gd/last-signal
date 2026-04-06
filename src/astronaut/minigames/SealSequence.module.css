@@ -90,15 +90,15 @@
   top: 0.5rem;
   right: 0.5rem;
   padding: 0.25rem 0.5rem;
-  border: 1px solid #ff4444;
+  border: 1px solid #00e5ff;
   border-radius: 4px;
-  background: rgba(255, 68, 68, 0.1);
-  color: #ff6666;
+  background: rgba(0, 229, 255, 0.1);
+  color: #00e5ff;
   font-size: 0.65rem;
   cursor: pointer;
   transition: background 0.12s ease;
 }
 
 .exitBtn:hover {
-  background: rgba(255, 68, 68, 0.25);
+  background: rgba(0, 229, 255, 0.25);
 }

@@ -1,46 +1,73 @@
 import { useGameStore } from '../stores/useGameStore';
+import { useConnectionStore } from '../stores/useConnectionStore';
+import { AudioEngine } from '../audio/AudioEngine';
 import { CrisisEngine } from './CrisisEngine';
 import { SystemsManager } from './SystemsManager';
+import type { SystemKey } from './types';
 
 let animationFrameId: number | null = null;
 let lastTickTime = 0;
 
 export const GameLoop = {
   start() {
+    this.stop();
+
     const startTime = Date.now();
     lastTickTime = startTime;
     CrisisEngine.start(startTime);
-    
+
     const tick = () => {
       const now = Date.now();
       const delta = (now - lastTickTime) / 1000;
       lastTickTime = now;
 
       // 1. Update game time in store
-      useGameStore.setState((state) => ({ 
-        gameTime: state.gameTime + delta 
+      useGameStore.setState((state) => ({
+        gameTime: state.gameTime + delta
       }));
 
       // 2. Crisis Engine tick
-      const { activeDecays } = CrisisEngine.tick(now);
+      const { newEvents, activeDecays } = CrisisEngine.tick(now);
+
+      if (newEvents.some(event => event.system === 'comms')) {
+        useGameStore.getState().setCommsDelaySeconds(20);
+      }
 
       // 3. Apply decays to systems
       Object.entries(activeDecays).forEach(([system, rate]) => {
         if (rate > 0) {
-          SystemsManager.applyPenalty(system as any, rate * delta);
+          SystemsManager.applyPenalty(system as SystemKey, rate * delta, true);
         }
       });
 
       // 4. Check lose conditions
       const state = useGameStore.getState();
-      const failedSystem = Object.entries(state.systemHealth).find(([_, health]) => health <= 0);
-      
+      const failedSystem = Object.entries(state.systemHealth).find(([, health]) => health <= 0);
+
       if (failedSystem) {
-        console.log(`GAME OVER: ${failedSystem[0]} failure`);
-        useGameStore.setState({ phase: 'postgame' });
+        const { role, conn } = useConnectionStore.getState();
+
+        if (role === 'astronaut') {
+          if (conn) {
+            conn.send(JSON.stringify({
+              type: 'gameEvent',
+              payload: { event: 'GAME_OVER', reason: failedSystem[0] },
+              sentAt: Date.now()
+            }));
+            conn.send(JSON.stringify({
+              type: 'gameOverImmediate',
+              payload: { reason: failedSystem[0] },
+              sentAt: Date.now()
+            }));
+          }
+        }
+        useGameStore.setState({ phase: 'postgame', gameEndReason: failedSystem[0] });
         this.stop();
         return;
       }
+
+      // 5. Dynamic Alarms
+      AudioEngine.updateAlarms(useGameStore.getState().systemHealth);
 
       animationFrameId = requestAnimationFrame(tick);
     };
