@@ -1,22 +1,46 @@
-## Tech stack
+# Agent Instructions
+
+## Package Manager
+- Use npm with `package-lock.json`: `npm install`, `npm run dev`, `npm run build`
+
+## Commands
+| Task | Command |
+|------|---------|
+| Dev server | `npm run dev` |
+| Typecheck | `npm run typecheck` |
+| Lint project | `npm run lint` |
+| Lint file | `npx eslint path/to/file.tsx` |
+| Production build | `npm run build` |
+
+## Commit Attribution
+AI commits MUST include:
+```
+Co-Authored-By: (the agent model's name and attribution byline)
+```
+
+## Tech Stack
 - Vite + React + TypeScript
-- Firebase Firestore signaling + pure WebRTC DataChannel (PeerJS removed)
-- Three.js (via @react-three/fiber) for Astronaut's 3D ship view
-- Zustand for state (NO persist middleware — localStorage may be blocked)
-- Pure CSS terminal UI for Mission Control screen
+- Three.js via `@react-three/fiber` and `@react-three/drei`
+- Zustand game state, without persist middleware
+- Firebase Firestore signaling + pure WebRTC DataChannel
+- Pure CSS terminal/minigame UI
 
-## Network layer (UPDATED — Phase 0)
-- Signaling: Firebase Firestore (free tier)
-- Transport: Pure WebRTC DataChannel (no PeerJS dependency)
-- Room codes: Firestore document IDs (6-char alphanumeric)
-- After handshake: fully P2P, Firestore no longer involved
-- .env.local holds VITE_FIREBASE_API_KEY and related vars
-- On Vercel: mirror all VITE_* vars in Project → Settings → Environment Variables
+## Project Rules
+- Do not reference or reintroduce PeerJS.
+- Do not use `localStorage` or `sessionStorage`.
+- Do not commit real Firebase secrets; use `VITE_FIREBASE_*` env vars.
+- Keep `firebase.json`, `.env*`, `node_modules/`, and `.DS_Store` ignored.
+- Do not add paid API services.
+- Do not load external `.glb` or `.gltf` assets; ship geometry is procedural.
+- Do not leave `console.log()` in production code.
 
-## NEVER
-- Reference PeerJS — it has been replaced with Firebase Firestore + pure WebRTC
-- Use localStorage or sessionStorage (may be blocked on Vercel preview)
-- Use any paid API services
-- Load external 3D asset files (.glb, .gltf) — all geometry must be procedural
-- Use setTimeout for game timing — use Date.now() deltas and requestAnimationFrame
-- Leave console.log() in any code going to production
+## Current Gameplay Contracts
+- Astronaut minigames open only through the keyboard hotkey `[E]` near a panel.
+- 3D panel mouse/click handlers must not open minigames.
+- Closing a minigame returns camera control through `src/astronaut/shipCameraControl.ts`; no extra viewport click is required.
+- Chat typing disables camera look until typing ends.
+- Minigame success uses `onSuccess`, repairs the system, then closes after a short success delay.
+
+## Reference Docs
+- `reading Files/progress.md`: current implementation and verification state.
+- `reading Files/last-signal-gdd.md`: design source of truth.

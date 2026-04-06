@@ -40,10 +40,33 @@ function healthToStatusColor(health: number): string {
 }
 
 function Corridor() {
-  const wallMat = useMemo(() => new THREE.MeshStandardMaterial({ color: WALL_COLOR, metalness: 0.25, roughness: 0.88 }), []);
-  const floorMat = useMemo(() => new THREE.MeshStandardMaterial({ color: FLOOR_COLOR, metalness: 0.25, roughness: 0.88 }), []);
-  const ribMat = useMemo(() => new THREE.MeshStandardMaterial({ color: METAL_COLOR, metalness: 0.25, roughness: 0.88 }), []);
-  const pipeMat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#202530', metalness: 0.25, roughness: 0.88 }), []);
+  const wallMat = useMemo(() => new THREE.MeshStandardMaterial({ 
+    color: WALL_COLOR, 
+    metalness: 0.8, 
+    roughness: 0.15,
+    envMapIntensity: 0.5
+  }), []);
+  
+  const floorMat = useMemo(() => new THREE.MeshStandardMaterial({ 
+    color: FLOOR_COLOR, 
+    metalness: 0.9, 
+    roughness: 0.25,
+    envMapIntensity: 0.8
+  }), []);
+
+  const ribMat = useMemo(() => new THREE.MeshStandardMaterial({ 
+    color: METAL_COLOR, 
+    metalness: 0.85, 
+    roughness: 0.1,
+    envMapIntensity: 0.6
+  }), []);
+
+  const pipeMat = useMemo(() => new THREE.MeshStandardMaterial({ 
+    color: '#1a1e26', 
+    metalness: 0.9, 
+    roughness: 0.12,
+    envMapIntensity: 0.7
+  }), []);
 
   const ribs = useMemo(() => {
     const arr = [];
@@ -59,58 +82,58 @@ function Corridor() {
 
   return (
     <group>
-      <mesh position={[0, 0, -CORRIDOR.length / 2]} rotation={[-Math.PI / 2, 0, 0]} material={floorMat}>
+      <mesh position={[0, 0, -CORRIDOR.length / 2]} rotation={[-Math.PI / 2, 0, 0]} material={floorMat} receiveShadow>
         <planeGeometry args={[CORRIDOR.width, CORRIDOR.length]} />
       </mesh>
       {gridLines.map((z, i) => (
         <mesh key={`grid-${i}`} position={[0, 0.01, z]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[CORRIDOR.width, 0.05]} />
-          <meshStandardMaterial color="#111" />
+          <meshStandardMaterial color="#111" metalness={0.9} roughness={0.1} />
         </mesh>
       ))}
       <mesh position={[0, CORRIDOR.height, -CORRIDOR.length / 2]} rotation={[Math.PI / 2, 0, 0]} material={floorMat}>
         <planeGeometry args={[CORRIDOR.width, CORRIDOR.length]} />
       </mesh>
-      <mesh position={[-CORRIDOR.width / 2, CORRIDOR.height / 2, -CORRIDOR.length / 2]} rotation={[0, Math.PI / 2, 0]} material={wallMat}>
+      <mesh position={[-CORRIDOR.width / 2, CORRIDOR.height / 2, -CORRIDOR.length / 2]} rotation={[0, Math.PI / 2, 0]} material={wallMat} receiveShadow>
         <planeGeometry args={[CORRIDOR.length, CORRIDOR.height]} />
       </mesh>
-      <mesh position={[CORRIDOR.width / 2, CORRIDOR.height / 2, -CORRIDOR.length / 2]} rotation={[0, -Math.PI / 2, 0]} material={wallMat}>
+      <mesh position={[CORRIDOR.width / 2, CORRIDOR.height / 2, -CORRIDOR.length / 2]} rotation={[0, -Math.PI / 2, 0]} material={wallMat} receiveShadow>
         <planeGeometry args={[CORRIDOR.length, CORRIDOR.height]} />
       </mesh>
       {ribs.map((z, i) => (
         <group key={`rib-${i}`} position={[0, CORRIDOR.height / 2, z]}>
-          <mesh position={[-CORRIDOR.width / 2 + 0.05, 0, 0]} material={ribMat}>
+          <mesh position={[-CORRIDOR.width / 2 + 0.05, 0, 0]} material={ribMat} castShadow receiveShadow>
             <boxGeometry args={[0.2, CORRIDOR.height, 0.3]} />
           </mesh>
-          <mesh position={[CORRIDOR.width / 2 - 0.05, 0, 0]} material={ribMat}>
+          <mesh position={[CORRIDOR.width / 2 - 0.05, 0, 0]} material={ribMat} castShadow receiveShadow>
             <boxGeometry args={[0.2, CORRIDOR.height, 0.3]} />
           </mesh>
-          <mesh position={[0, CORRIDOR.height / 2 - 0.05, 0]} material={ribMat}>
+          <mesh position={[0, CORRIDOR.height / 2 - 0.05, 0]} material={ribMat} castShadow receiveShadow>
             <boxGeometry args={[CORRIDOR.width, 0.2, 0.3]} />
           </mesh>
         </group>
       ))}
-      <mesh position={[-CORRIDOR.width / 2 + 0.15, 0.4, -CORRIDOR.length / 2]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh position={[-CORRIDOR.width / 2 + 0.15, 0.4, -CORRIDOR.length / 2]} rotation={[Math.PI / 2, 0, 0]} castShadow>
         <cylinderGeometry args={[0.08, 0.08, CORRIDOR.length, 8]} />
-        <meshStandardMaterial color="#202530" metalness={0.25} roughness={0.88} />
+        <meshStandardMaterial color="#202530" metalness={0.95} roughness={0.08} />
       </mesh>
-      <mesh position={[0.5, CORRIDOR.height - 0.15, -CORRIDOR.length / 2]} material={pipeMat}>
+      <mesh position={[0.5, CORRIDOR.height - 0.15, -CORRIDOR.length / 2]} material={pipeMat} castShadow>
         <boxGeometry args={[0.4, 0.1, CORRIDOR.length]} />
       </mesh>
       <group position={[CORRIDOR.width / 2 - 0.01, 1.6, -10]}>
         <mesh rotation={[0, -Math.PI / 2, 0]}>
           <circleGeometry args={[0.3, 32]} />
-          <meshStandardMaterial color="#000" emissive="#050810" />
+          <meshStandardMaterial color="#000" emissive="#050810" emissiveIntensity={2} />
         </mesh>
       </group>
       <group position={[CORRIDOR.width / 2 - 0.01, 1.6, -18]}>
         <mesh rotation={[0, -Math.PI / 2, 0]}>
           <circleGeometry args={[0.3, 32]} />
-          <meshStandardMaterial color="#000" emissive="#050810" />
+          <meshStandardMaterial color="#000" emissive="#050810" emissiveIntensity={2} />
         </mesh>
       </group>
       <group position={[0, CORRIDOR.height / 2, -CORRIDOR.length + 0.1]}>
-        <mesh material={ribMat}>
+        <mesh material={ribMat} castShadow receiveShadow>
           <boxGeometry args={[2, 2.4, 0.2]} />
         </mesh>
         <mesh position={[0, 0, 0.11]} material={wallMat}>
@@ -132,25 +155,25 @@ function SystemPanel({ config }: { config: PanelConfig }) {
     if (statusRef.current) {
       statusRef.current.color.copy(statusColor);
       statusRef.current.emissive.copy(statusColor);
-      statusRef.current.emissiveIntensity = health < 50 ? 1.5 : 0.8;
+      statusRef.current.emissiveIntensity = health < 50 ? 5.0 : 2.0;
     }
   });
 
   return (
     <group position={position} rotation={rotation}>
-      <mesh>
+      <mesh castShadow>
         <boxGeometry args={[1.2, 1, 0.1]} />
-        <meshStandardMaterial color="#1a1c20" metalness={0.7} roughness={0.4} />
+        <meshStandardMaterial color="#1a1c20" metalness={0.9} roughness={0.12} />
       </mesh>
       <mesh position={[0, 0.1, 0.06]}>
         <boxGeometry args={[0.9, 0.5, 0.02]} />
-        <meshStandardMaterial color="#050810" emissive="#001122" emissiveIntensity={0.5} />
+        <meshStandardMaterial color="#050810" emissive="#001122" emissiveIntensity={3} />
       </mesh>
       <group position={[0, -0.3, 0.06]}>
         {[[-0.3, 0], [0, 0], [0.3, 0]].map((p, i) => (
           <mesh key={i} position={[p[0], p[1], 0]}>
             <boxGeometry args={[0.15, 0.15, 0.02]} />
-            <meshStandardMaterial color="#222" />
+            <meshStandardMaterial color="#222" metalness={0.8} roughness={0.2} />
           </mesh>
         ))}
       </group>
@@ -190,47 +213,48 @@ function ShipLights() {
     const danger = systemHealth.hull < 50 || systemHealth.power < 50 || systemHealth.lifeSupport < 40;
 
     if (danger) {
-      const pulse = (Math.sin(state.clock.elapsedTime * 4) * 0.5 + 0.5) * 5.0;
+      const pulse = (Math.sin(state.clock.elapsedTime * 4) * 0.5 + 0.5) * 12.0;
       emergencyRefs.current.forEach(ref => {
         if (ref) ref.intensity = pulse;
       });
     } else {
       emergencyRefs.current.forEach(ref => {
-        if (ref) ref.intensity = 0;
+        if (ref) ref.intensity = 0.5; // Subtle red accent when not in danger
       });
     }
   });
 
   return (
     <>
-      {/* Ambient — increased for better visibility */}
-      <ambientLight color="#0a1520" intensity={0.45} />
+      <ambientLight color="#0a1520" intensity={0.4} />
 
-      {/* Four ceiling strip lights — cool blue-white, tight cones, increased intensity */}
-      <spotLight ref={spot1Ref} position={[0, 2.85, -2]} color="#b8d4e8" intensity={18} angle={0.3} penumbra={0.6} distance={8} decay={1.5} castShadow={false} />
-      <spotLight ref={spot2Ref} position={[0, 2.85, -7]} color="#a0c0dd" intensity={16} angle={0.3} penumbra={0.6} distance={8} decay={1.5} />
-      <spotLight ref={spot3Ref} position={[0, 2.85, -13]} color="#a0c0dd" intensity={16} angle={0.3} penumbra={0.6} distance={8} decay={1.5} />
-      <spotLight ref={spot4Ref} position={[0, 2.85, -18]} color="#8ab0cc" intensity={14} angle={0.3} penumbra={0.7} distance={8} decay={1.5} />
+      <spotLight ref={spot1Ref} position={[0, 2.75, -2]} color="#b8d4e8" intensity={55} angle={0.32} penumbra={0.75} distance={11} decay={2} castShadow />
+      <spotLight ref={spot2Ref} position={[0, 2.75, -7]} color="#a0c0dd" intensity={50} angle={0.32} penumbra={0.75} distance={11} decay={2} castShadow />
+      <spotLight ref={spot3Ref} position={[0, 2.75, -13]} color="#a0c0dd" intensity={50} angle={0.32} penumbra={0.75} distance={11} decay={2} castShadow />
+      <spotLight ref={spot4Ref} position={[0, 2.75, -18]} color="#8ab0cc" intensity={45} angle={0.32} penumbra={0.75} distance={11} decay={2} castShadow />
 
-      {/* Emergency lights — RED, managed by refs in useFrame */}
+      {/* Deep blue fill lights at the end to create depth */}
+      <pointLight position={[0, 1.4, -22]} color="#003366" intensity={15} distance={15} decay={1.5} />
+
+      {/* Emergency lights — RED */}
       {emergencyPositions.map((pos, i) => (
         <pointLight
           key={i}
           ref={el => emergencyRefs.current[i] = el}
           position={pos}
           color="#ff1500"
-          intensity={0}
-          distance={10}
-          decay={1.5}
+          intensity={0.5}
+          distance={6}
+          decay={2}
         />
       ))}
 
-      {/* Subtle warm panel glow — one per system panel position, increased slightly */}
-      <pointLight position={[-1.6, 1.3, -3]}  color="#002244" intensity={0.8} distance={3} decay={2} />
-      <pointLight position={[ 1.6, 1.3, -7]}  color="#002244" intensity={0.8} distance={3} decay={2} />
-      <pointLight position={[-1.6, 1.3, -11]} color="#002244" intensity={0.8} distance={3} decay={2} />
-      <pointLight position={[ 1.6, 1.3, -15]} color="#002244" intensity={0.8} distance={3} decay={2} />
-      <pointLight position={[-1.6, 1.3, -19]} color="#002244" intensity={0.8} distance={3} decay={2} />
+      {/* Panel interaction glow */}
+      <pointLight position={[-1.6, 1.3, -3]}  color="#113355" intensity={2} distance={4} decay={2} />
+      <pointLight position={[ 1.6, 1.3, -7]}  color="#113355" intensity={2} distance={4} decay={2} />
+      <pointLight position={[-1.6, 1.3, -11]} color="#113355" intensity={2} distance={4} decay={2} />
+      <pointLight position={[ 1.6, 1.3, -15]} color="#113355" intensity={2} distance={4} decay={2} />
+      <pointLight position={[-1.6, 1.3, -19]} color="#113355" intensity={2} distance={4} decay={2} />
     </>
   );
 }
@@ -354,17 +378,27 @@ function CameraRig({ lookEnabled }: { lookEnabled: boolean }) {
 export default function ShipCanvas({ style, lookEnabled = true }: { style?: React.CSSProperties; lookEnabled?: boolean }) {
   return (
     <div style={{ ...style, width: '100%', height: '100%' }}>
-      <Canvas shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}>
-        <color attach="background" args={['#020204']} />
-        <fog attach="fog" args={['#020204', 5, 20]} />
+      <Canvas 
+        shadows 
+        gl={{ 
+          antialias: true, 
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.1
+        }}
+      >
+        <color attach="background" args={['#020306']} />
+        <fog attach="fog" args={['#020306', 8, 24]} />
+        
         <ShipLights />
         <Corridor />
+        
         {PANEL_POSITIONS.map((cfg) => (
           <SystemPanel
             key={cfg.key}
             config={cfg}
           />
         ))}
+        
         <CameraRig lookEnabled={lookEnabled} />
       </Canvas>
     </div>

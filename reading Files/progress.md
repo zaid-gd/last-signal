@@ -1,72 +1,73 @@
-Original prompt: You have a React/Vite game repo with Firebase config accidentally committed.
+# Last Signal Progress
 
-Immediate security fix:
-1. Remove firebase.json from Git (git rm --cached firebase.json)
-2. Add to .gitignore:
-firebase.json
-.env*
-node_modules/
-.DS_Store
+## Original Objective
+- Secure the Firebase setup after Firebase config was committed.
+- Replace PeerJS with Firebase Firestore signaling plus pure WebRTC P2P.
+- Keep the project on free services and environment-based configuration.
 
-3. Create .env.local with Firebase config loaded via import.meta.env.VITE_FIREBASE_*
+## Security And Config
+- Verified `firebase.json` is not present in this checkout.
+- Added ignore coverage for `firebase.json`, `.env*`, `node_modules/`, and `.DS_Store`.
+- Added local Firebase env placeholders for `VITE_FIREBASE_*` values.
+- Firebase config is expected through `import.meta.env`.
+- Vercel deployments must mirror all `VITE_*` values in Project Settings -> Environment Variables.
 
-Replace PeerJS with Firebase signaling + pure WebRTC P2P.
+## Network Layer
+- Replaced the old P2P helper with `src/network/P2PManager.ts`.
+- PeerJS has been removed from the app contract; do not reintroduce it.
+- Signaling uses Firebase Firestore room documents with 6-character alphanumeric room codes.
+- Transport after handshake is pure WebRTC DataChannel.
+- The 10-second receive delay belongs in the network layer, not the screens.
+- Added ICE candidate queueing, candidate-type diagnostics, connection-state diagnostics, and host-side ICE restart handling.
+- Joiner answer flow now flushes remote ICE only after both local and remote descriptions are ready.
+- Current ICE fallback servers include Google STUN, Cloudflare STUN, and Metered STUN.
 
-- Verified there is no `firebase.json` file in this checkout, so there was nothing to untrack from Git.
-- Added `firebase.json`, `.env*`, `node_modules/`, and `.DS_Store` coverage in `.gitignore`.
-- Added `.env.local` placeholder entries for the Firebase values so config can stay local.
-- Replacing the old P2P helper with `src/network/P2PManager.ts` and moving the 10-second receive delay into the network layer.
-- Replaced `src/signaling/P2PConnection.ts` with `src/network/P2PManager.ts`.
-- Moved the 10-second receive delay out of the screens and into the networking layer.
-- Verified `npm run typecheck` and `npm run build` pass after the refactor.
-- Added distinct host/joiner waiting UI so the joiner no longer sees the host's "Share this Room ID" screen.
-- Added candidate queueing, connection-state logs, and host-side ICE restart handling in `P2PManager`.
-- Tightened the joiner answer flow so remote ICE candidates are only flushed after both local and remote descriptions are set; candidate logs now include the ICE candidate type to help diagnose `checking -> disconnected` failures.
+## Gameplay And State
+- `src/stores/useGameStore.ts` tracks system health, active minigame, nearest panel, and minigame close cooldown state.
+- Timed degradation and crisis behavior were stabilized in the game loop and crisis engine.
+- Minigame success callbacks now repair their target system and close after a short success delay.
+- HUD warnings and mission-control readouts reflect current system health.
+- Chat typing disables camera look while the input is active.
 
-## Critical Fixes Completed (Apr 5, 2026)
+## Astronaut Ship View
+- Ship geometry remains procedural in `src/astronaut/ShipCanvas.tsx`.
+- Current corridor is a dark industrial procedural layout with panels, floor/ceiling/walls, ribs, pipes, panel glow, and emergency lighting.
+- The astronaut black-screen regression was addressed by removing the fragile post-processing composer from the ship canvas and restoring renderer-only visibility with a brighter ambient/fog/light baseline.
+- `PointerLockControls` from Drei owns camera look.
+- Movement is WASD, with camera rotation from pointer lock.
+- Nearest-panel detection drives the HUD prompt.
+- Panels are not mouse-click activators; minigames open only with `[E]` near a panel.
 
-### ISSUE 1 — Ship Visuals (ShipCanvas.tsx)
-- Removed ALL emissive properties and glowing materials from walls, floor, ceiling
-- Set wall material: MeshStandardMaterial color=#1a1f2e roughness=0.8 metalness=0.3
-- Set floor material: color=#0f1218 roughness=0.9 metalness=0.1
-- Set ceiling material: color=#0d1018 roughness=0.9
-- Removed bright/saturated blue LED strip lights entirely
-- Replaced corridor lighting with:
-  - ONE AmbientLight color=#112233 intensity=0.4 (very dim, dark atmosphere)
-  - FOUR PointLights along ceiling: color=#334477 intensity=0.8 distance=6, evenly spaced
-  - TWO emergency PointLights: color=#ff2222 intensity=0 distance=8 — pulse with Math.sin(clock.elapsedTime * 4) * 0.8 + 1.2 when any systemHealth < 50
-- Result: Dark, cramped, industrial Alien 1979 aesthetic — barely lit
+## Minigames And Cursor Control
+- Active minigames render in `src/components/AstronautScreen.tsx`.
+- Opening a minigame exits pointer lock and shows the cursor.
+- Closing a minigame uses `flushSync` to clear `activeMiniGame`, then requests camera control again.
+- The current camera reacquire path uses `src/astronaut/shipCameraControl.ts` to reconnect the live Drei controls instance before calling `lock()`.
+- This avoids the bad state where the browser hides the cursor but the camera controls miss `pointerlockchange`.
+- The clicking/pointer-lock flow is verified working: 3D panel clicks no longer open minigames, `[E]` opens panels, and closing a minigame returns camera control without another viewport click.
 
-### ISSUE 2 — WebRTC Connection (P2PManager.ts)
-- Replaced single STUN server with multiple fallback ICE servers:
-  - stun:stun.l.google.com:19302
-  - stun:stun1.l.google.com:19302
-  - stun:stun.cloudflare.com:3478
-  - stun:stun.relay.metered.ca:80
-- Added reconnection logic: when connectionState === 'failed', wait 2 seconds then call restartIceNegotiation()
+## Minigame Modules
+- Hull: `SealSequence`
+- Life support: `PowerRouter`
+- Power: `BreakerPanel`
+- Navigation: `NavKeypad`
+- Comms: `AntennaWheel`
+- Each minigame accepts `onClose`; repaired flows also use `onSuccess`.
 
-### ISSUE 3 — BreakerPanel Visibility (AstronautScreen.tsx + useGameStore.ts)
-- Verified BreakerPanel only renders when activeMiniGame === 'power'
-- Confirmed activeMiniGame: null is in store initial state
-- Conditional rendering: {activeMiniGame === 'power' && <BreakerPanel />}
+## Verification
+- Latest static verification after the astronaut render fix:
+  - `npm run typecheck`: passed
+  - `npm run lint`: passed
+  - `npm run build`: passed
+- Latest manual browser verification:
+  - Panel clicking issue: fixed.
+  - Camera control after minigame close: fixed.
+  - Current game flow: working correctly.
+- Browser visual verification for the black-screen regression was not rerun in this sandbox because no local dev server was listening on the reported port and the repo does not include Playwright.
+- Build still reports existing warnings:
+  - `caniuse-lite` is outdated.
+  - Main JS chunk is larger than 500 kB after minification.
 
-### ISSUE 4 — Ship Visual Redesign to Match Reference Image (ShipCanvas.tsx)
-- Updated corridor dimensions: width=5, height=3.5 (more spacious industrial feel)
-- New materials to match dark blue-grey metal reference:
-  - Walls: color=#1e2838, metalness=0.4, roughness=0.7
-  - Floor: color=#151a22, metalness=0.3, roughness=0.8
-  - Ceiling: color=#0d1117, metalness=0.2, roughness=0.85
-- Lighting redesign:
-  - Ambient: color=#0a0f14, intensity=0.15 (very dark)
-  - TWO SpotLights: color=#445566, intensity=2.5, narrow beams (angle=0.4, penumbra=0.3)
-  - TWO Red warning lights: at corridor end (z=-9), pulse when health < 50
-  - EIGHT Blue indicator point lights: 4 positions on each wall (z=-6, -2, 2, 6)
-- Added visible blue glowing spheres on walls (emissiveIntensity=2):
-  - 4 positions per wall, actual mesh spheres not just lights
-  - color=#4488ff, roughness=0.2 for glossy look
-- Updated SystemPanel components:
-  - Detailed control panel with screen area
-  - Green status light at top (emissive, changes color with health)
-  - 5 keypad buttons below screen
-  - Positioned at height 1.5 for visibility
-- Result: Matches reference image with glowing blue wall indicators, focused spotlights, and detailed control panels
+## Current Risks And Follow-Up
+- Consider code-splitting minigames or Three.js-heavy routes to reduce the large Vite chunk warning.
+- Consider updating Browserslist data when dependency maintenance is in scope.
