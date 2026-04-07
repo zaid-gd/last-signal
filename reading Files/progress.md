@@ -31,8 +31,8 @@
 
 ## Astronaut Ship View
 - Ship geometry remains procedural in `src/astronaut/ShipCanvas.tsx`.
-- Current corridor is a dark industrial procedural layout with panels, floor/ceiling/walls, ribs, pipes, panel glow, and emergency lighting.
-- The astronaut black-screen regression was addressed by removing the fragile post-processing composer from the ship canvas and restoring renderer-only visibility with a brighter ambient/fog/light baseline.
+- Current corridor is Gemini's dark industrial procedural layout with generated grid textures, panels, floor/ceiling/walls, ribs, pipes, fill lights, spotlights, and emergency lighting.
+- The astronaut black-screen regression was addressed by removing only the fragile `@react-three/postprocessing` composer layer from the ship canvas; Gemini's scene geometry, procedural textures, lighting, fog, material colors, and HUD styling remain in place.
 - `PointerLockControls` from Drei owns camera look.
 - Movement is WASD, with camera rotation from pointer lock.
 - Nearest-panel detection drives the HUD prompt.
@@ -62,8 +62,8 @@
 - Latest manual browser verification:
   - Panel clicking issue: fixed.
   - Camera control after minigame close: fixed.
-  - Current game flow: working correctly.
-- Browser visual verification for the black-screen regression was not rerun in this sandbox because no local dev server was listening on the reported port and the repo does not include Playwright.
+- The user reported the UI flashed briefly before the screen went black; the current fix targets the post-processing frame layer that overlaps that symptom.
+- Browser visual verification for the black-screen regression was not rerun with automation in this sandbox because the repo does not include Playwright.
 - Build still reports existing warnings:
   - `caniuse-lite` is outdated.
   - Main JS chunk is larger than 500 kB after minification.

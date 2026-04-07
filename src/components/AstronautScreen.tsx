@@ -16,12 +16,13 @@ const miniGameOverlayStyle: React.CSSProperties = {
   left: '50%',
   transform: 'translate(-50%, -50%)',
   zIndex: 100,
-  background: 'rgba(5, 10, 20, 0.9)',
+  background: 'rgba(5, 10, 20, 0.95)',
   border: '2px solid #00e5ff',
-  boxShadow: '0 0 20px rgba(0, 229, 255, 0.3)',
+  boxShadow: '0 0 30px rgba(0, 229, 255, 0.4)',
   padding: '2rem',
   color: '#00e5ff',
-  fontFamily: 'monospace',
+  fontFamily: "'Azeret Mono', monospace",
+  backdropFilter: 'blur(10px)',
 };
 
 const crtOverlayStyle: React.CSSProperties = {
@@ -29,8 +30,23 @@ const crtOverlayStyle: React.CSSProperties = {
   inset: 0,
   pointerEvents: 'none',
   zIndex: 1000,
-  background: 'linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06))',
-  backgroundSize: '100% 4px, 3px 100%',
+  background: `
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03))
+  `,
+  backgroundSize: '100% 3px, 3px 100%',
+  opacity: 0.8,
+  animation: 'crt-flicker 0.15s infinite'
+};
+
+const scanlineStyle: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  pointerEvents: 'none',
+  zIndex: 1001,
+  background: 'linear-gradient(to bottom, transparent, rgba(0, 229, 255, 0.05) 50%, transparent)',
+  backgroundSize: '100% 100px',
+  animation: 'scanline 8s linear infinite',
 };
 
 function AstronautHUD() {
@@ -38,37 +54,114 @@ function AstronautHUD() {
   const activeMiniGame = useGameStore((s) => s.activeMiniGame);
   const nearestSystem = useGameStore((s) => s.nearestSystem);
 
+  const getHealthColor = (val: number) => {
+    if (val >= 60) return '#00ff66';
+    if (val >= 30) return '#ffaa00';
+    return '#ff0033';
+  };
+
   return (
-    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 50, color: '#00e5ff', fontFamily: 'monospace', padding: '20px', boxSizing: 'border-box' }}>
-      <div style={{ position: 'absolute', top: '20px', left: '20px' }}>
-        O2 CONCENTRATION: {Math.floor(health.lifeSupport)}%
-        <div style={{ width: '200px', height: '4px', background: 'rgba(0, 229, 255, 0.1)', marginTop: '5px' }}>
-          <div style={{ width: `${health.lifeSupport}%`, height: '100%', background: '#00e5ff', transition: 'width 0.3s' }} />
+    <div style={{ 
+      position: 'fixed', 
+      inset: 0, 
+      pointerEvents: 'none', 
+      zIndex: 50, 
+      color: '#00e5ff', 
+      fontFamily: "'Azeret Mono', monospace", 
+      padding: '30px', 
+      boxSizing: 'border-box',
+      textShadow: '0 0 5px rgba(0, 229, 255, 0.5)'
+    }}>
+      {/* Top Left: O2 Status */}
+      <div style={{ position: 'absolute', top: '30px', left: '30px', borderLeft: '3px solid #00e5ff', paddingLeft: '15px' }}>
+        <div style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: '2px' }}>LIFE_SUPPORT_SYSTEM</div>
+        <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
+          O2 CONC: {Math.floor(health.lifeSupport)}%
+        </div>
+        <div style={{ width: '220px', height: '6px', background: 'rgba(0, 229, 255, 0.15)', marginTop: '8px', position: 'relative' }}>
+          <div style={{ 
+            width: `${health.lifeSupport}%`, 
+            height: '100%', 
+            background: getHealthColor(health.lifeSupport), 
+            transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            boxShadow: `0 0 10px ${getHealthColor(health.lifeSupport)}`
+          }} />
         </div>
       </div>
-      <div style={{ position: 'absolute', top: '20px', right: '20px', textAlign: 'right' }}>
+
+      {/* Top Right: System Alerts */}
+      <div style={{ position: 'absolute', top: '30px', right: '30px', textAlign: 'right' }}>
         {(Object.entries(health) as [keyof SystemHealth, number][]).map(([sys, val]) => (
           val < 50 && (
-            <div key={sys} style={{ color: '#ff2222', animation: 'hud-pulse 1s infinite' }}>
-              WARNING: {sys.toUpperCase()} CRITICAL ({Math.floor(val)}%)
+            <div key={sys} style={{ 
+              color: getHealthColor(val), 
+              animation: 'hud-alert 0.5s infinite alternate',
+              marginBottom: '5px',
+              fontSize: '0.9rem',
+              fontWeight: 'bold'
+            }}>
+              ⚠ {sys.toUpperCase()} FAILURE IMMINENT: {Math.floor(val)}%
             </div>
           )
         ))}
       </div>
-      <div style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
+
+      {/* Bottom Center: Interaction Prompts */}
+      <div style={{ position: 'absolute', bottom: '120px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
         {nearestSystem && !activeMiniGame && (
-          <div style={{ fontSize: '1.2rem', textShadow: '0 0 10px #00e5ff' }}>
-            [E] ACCESS {nearestSystem.toUpperCase()} PANEL
+          <div style={{ 
+            fontSize: '1.1rem', 
+            background: 'rgba(0, 229, 255, 0.1)', 
+            padding: '10px 20px', 
+            border: '1px solid rgba(0, 229, 255, 0.3)',
+            animation: 'hud-flicker 2s infinite'
+          }}>
+            <span style={{ opacity: 0.7 }}>PRESS</span> [E] <span style={{ opacity: 0.7 }}>TO REPAIR</span> {nearestSystem.toUpperCase()}
           </div>
         )}
         {!activeMiniGame && (
-          <div style={{ fontSize: '0.8rem', opacity: 0.5, marginTop: '10px' }}>
-            PRESS ENTER TO COMMUNICATE
+          <div style={{ fontSize: '0.75rem', opacity: 0.4, marginTop: '15px', letterSpacing: '0.1em' }}>
+            LOCAL_COMMS_ACTIVE // PRESS ENTER
           </div>
         )}
       </div>
+
+      {/* Helmet Frame / Vignette look */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        boxShadow: 'inset 0 0 150px rgba(0, 0, 0, 0.6)',
+        border: '40px solid transparent',
+        borderImage: 'radial-gradient(circle, transparent 70%, rgba(0, 0, 0, 0.4) 100%) 1',
+        pointerEvents: 'none'
+      }} />
+
       <style>{`
-        @keyframes hud-pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        @keyframes hud-alert { 
+          0% { opacity: 1; transform: scale(1); } 
+          100% { opacity: 0.5; transform: scale(1.02); } 
+        }
+        @keyframes hud-flicker {
+          0% { opacity: 1; }
+          1% { opacity: 0.8; }
+          2% { opacity: 1; }
+          40% { opacity: 1; }
+          41% { opacity: 0.9; }
+          42% { opacity: 1; }
+          100% { opacity: 1; }
+        }
+        @keyframes scanline {
+          0% { transform: translateY(-100%); }
+          100% { transform: translateY(100%); }
+        }
+        @keyframes crt-flicker {
+          0% { opacity: 0.97; }
+          5% { opacity: 0.95; }
+          10% { opacity: 0.97; }
+          15% { opacity: 0.96; }
+          20% { opacity: 0.98; }
+          100% { opacity: 1; }
+        }
       `}</style>
     </div>
   );
@@ -116,13 +209,20 @@ export default function AstronautScreen() {
   }, [handleCloseMiniGame]);
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#000' }}>
+    <div style={{ 
+      position: 'relative', 
+      width: '100vw', 
+      height: '100vh', 
+      overflow: 'hidden', 
+      background: '#000',
+    }}>
       <ShipCanvas
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
         lookEnabled={!chatTyping && !activeMiniGame}
       />
 
       <div style={crtOverlayStyle} />
+      <div style={scanlineStyle} />
 
       {!activeMiniGame && <AstronautHUD />}
 
@@ -131,12 +231,11 @@ export default function AstronautScreen() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.7)',
+            background: 'rgba(0, 0, 0, 0.8)',
             zIndex: 90,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            // Explicitly prevent any pointer events from leaking to canvas
             pointerEvents: 'all'
           }}
           onPointerDown={(e) => e.stopPropagation()}
@@ -174,3 +273,4 @@ export default function AstronautScreen() {
     </div>
   );
 }
+
