@@ -1,5 +1,7 @@
 import { useConnectionStore } from '../stores/useConnectionStore';
+import { useGameStore } from '../stores/useGameStore';
 import type { SystemHealth } from '../stores/useGameStore';
+import type { EnvironmentSeverity } from '../game/types';
 
 interface WebAudioWindow extends Window {
   webkitAudioContext?: typeof AudioContext;
@@ -8,10 +10,15 @@ interface WebAudioWindow extends Window {
 class AudioEngineImpl {
   private ctx: AudioContext | null = null;
   private currentAlarm: 'none' | 'warning' | 'critical' = 'none';
+  private currentSeverity: EnvironmentSeverity = 'nominal';
+  
   private osc: OscillatorNode | null = null;
   private lfo: OscillatorNode | null = null;
   private lfoGain: GainNode | null = null;
   private masterGain: GainNode | null = null;
+  
+  private ambientOsc: OscillatorNode | null = null;
+  private ambientGain: GainNode | null = null;
 
   private init() {
     if (!this.ctx) {
@@ -19,6 +26,7 @@ class AudioEngineImpl {
         const AudioContextClass = window.AudioContext || (window as WebAudioWindow).webkitAudioContext;
         if (AudioContextClass) {
           this.ctx = new AudioContextClass();
+          this.setupAmbient();
         }
       } catch {
         // AudioContext not supported
@@ -28,6 +36,22 @@ class AudioEngineImpl {
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
     }
+  }
+
+  private setupAmbient() {
+    if (!this.ctx) return;
+    this.ambientOsc = this.ctx.createOscillator();
+    this.ambientGain = this.ctx.createGain();
+    
+    // Low hum for ambient ship atmosphere
+    this.ambientOsc.type = 'sine';
+    this.ambientOsc.frequency.value = 50; 
+    
+    this.ambientGain.gain.value = 0.1;
+    
+    this.ambientOsc.connect(this.ambientGain);
+    this.ambientGain.connect(this.ctx.destination);
+    this.ambientOsc.start();
   }
 
   private stopCurrent() {
@@ -93,6 +117,9 @@ class AudioEngineImpl {
   }
 
   public updateAlarms(systemHealth: SystemHealth) {
+    this.init();
+    const severity = useGameStore.getState().environmentSeverity;
+    
     let critical = false;
     let warning = false;
 
@@ -108,8 +135,26 @@ class AudioEngineImpl {
     if ((this.currentAlarm === 'critical' || this.currentAlarm === 'warning') && needed === 'none') {
       this.playSuccessChime();
     } else if (this.currentAlarm === 'critical' && needed === 'warning') {
-       // Also chime if downgrading severity (i.e., fixed the critical issue but a warning remains)
        this.playSuccessChime();
+    }
+
+    // Update ambient based on severity
+    if (this.currentSeverity !== severity) {
+      this.currentSeverity = severity;
+      if (this.ambientGain && this.ctx) {
+        const now = this.ctx.currentTime;
+        let ambientVol = 0.1;
+        let ambientFreq = 50;
+        
+        if (severity === 'warning') { ambientVol = 0.15; ambientFreq = 55; }
+        else if (severity === 'critical') { ambientVol = 0.25; ambientFreq = 60; }
+        else if (severity === 'endgame') { ambientVol = 0.4; ambientFreq = 40; } // Low thrum
+        
+        this.ambientGain.gain.exponentialRampToValueAtTime(ambientVol, now + 2);
+        if (this.ambientOsc) {
+          this.ambientOsc.frequency.exponentialRampToValueAtTime(ambientFreq, now + 2);
+        }
+      }
     }
 
     if (this.currentAlarm !== needed) {

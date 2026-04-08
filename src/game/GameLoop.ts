@@ -3,6 +3,7 @@ import { useConnectionStore } from '../stores/useConnectionStore';
 import { AudioEngine } from '../audio/AudioEngine';
 import { CrisisEngine } from './CrisisEngine';
 import { SystemsManager } from './SystemsManager';
+import { EnvironmentManager } from './EnvironmentManager';
 import type { SystemKey } from './types';
 
 let animationFrameId: number | null = null;
@@ -40,7 +41,10 @@ export const GameLoop = {
         }
       });
 
-      // 4. Check lose conditions
+      // 4. Update environment state
+      EnvironmentManager.update();
+
+      // 5. Check lose conditions
       const state = useGameStore.getState();
       const failedSystem = Object.entries(state.systemHealth).find(([, health]) => health <= 0);
 
@@ -66,7 +70,7 @@ export const GameLoop = {
         return;
       }
 
-      // 5. Dynamic Alarms
+      // 6. Dynamic Alarms
       AudioEngine.updateAlarms(useGameStore.getState().systemHealth);
 
       animationFrameId = requestAnimationFrame(tick);

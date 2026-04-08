@@ -53,6 +53,8 @@ function AstronautHUD() {
   const health = useGameStore((s) => s.systemHealth);
   const activeMiniGame = useGameStore((s) => s.activeMiniGame);
   const nearestSystem = useGameStore((s) => s.nearestSystem);
+  const evaState = useGameStore((s) => s.evaState);
+  const enableRetroFilter = useGameStore((s) => s.enableRetroFilter);
 
   const getHealthColor = (val: number) => {
     if (val >= 60) return '#00ff66';
@@ -114,15 +116,27 @@ function AstronautHUD() {
             background: 'rgba(0, 229, 255, 0.1)', 
             padding: '10px 20px', 
             border: '1px solid rgba(0, 229, 255, 0.3)',
-            animation: 'hud-flicker 2s infinite'
+            animation: 'hud-flicker 2s infinite',
+            marginBottom: '15px'
           }}>
-            <span style={{ opacity: 0.7 }}>PRESS</span> [E] <span style={{ opacity: 0.7 }}>TO REPAIR</span> {nearestSystem.toUpperCase()}
+            {nearestSystem === 'comms' && evaState === 'interior' ? (
+              <><span style={{ opacity: 0.7 }}>PRESS</span> [E] <span style={{ opacity: 0.7 }}>TO INITIATE</span> EVA SEQUENCE</>
+            ) : nearestSystem === 'comms' && evaState === 'exterior' ? (
+              <><span style={{ opacity: 0.7 }}>PRESS</span> [E] <span style={{ opacity: 0.7 }}>TO REPAIR</span> ANTENNA ARRAY</>
+            ) : (
+              <><span style={{ opacity: 0.7 }}>PRESS</span> [E] <span style={{ opacity: 0.7 }}>TO REPAIR</span> {nearestSystem.toUpperCase()}</>
+            )}
           </div>
         )}
         {!activeMiniGame && (
-          <div style={{ fontSize: '0.75rem', opacity: 0.4, marginTop: '15px', letterSpacing: '0.1em' }}>
-            LOCAL_COMMS_ACTIVE // PRESS ENTER
-          </div>
+          <>
+            <div style={{ fontSize: '0.75rem', opacity: 0.4, letterSpacing: '0.1em' }}>
+              LOCAL_COMMS_ACTIVE // PRESS ENTER
+            </div>
+            <div style={{ fontSize: '0.75rem', opacity: 0.4, letterSpacing: '0.1em', marginTop: '4px' }}>
+              OPTICAL_FILTER_SYS // PRESS [F] // {enableRetroFilter ? 'ON' : 'OFF'}
+            </div>
+          </>
         )}
       </div>
 
@@ -171,6 +185,21 @@ export default function AstronautScreen() {
   const [chatTyping, setChatTyping] = useState(false);
   const activeMiniGame = useGameStore((state) => state.activeMiniGame);
   const setActiveMiniGame = useGameStore((state) => state.setActiveMiniGame);
+  const evaState = useGameStore((state) => state.evaState);
+  const setEvaState = useGameStore((state) => state.setEvaState);
+  const toggleRetroFilter = useGameStore((state) => state.toggleRetroFilter);
+
+  // Transition state machine
+  useEffect(() => {
+    if (evaState === 'transitioning_out') {
+      const timer = setTimeout(() => setEvaState('exterior'), 1500);
+      return () => clearTimeout(timer);
+    }
+    if (evaState === 'transitioning_in') {
+      const timer = setTimeout(() => setEvaState('interior'), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [evaState, setEvaState]);
 
   const handleCloseMiniGame = useCallback(() => {
     flushSync(() => {
@@ -194,19 +223,25 @@ export default function AstronautScreen() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'f' && !chatTyping && !activeMiniGame) {
+        toggleRetroFilter();
+      }
       if (e.key === 'Escape' && activeMiniGame) {
         handleCloseMiniGame();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeMiniGame, handleCloseMiniGame]);
+  }, [activeMiniGame, handleCloseMiniGame, chatTyping, toggleRetroFilter]);
 
   const handleSuccess = useCallback(() => {
     setTimeout(() => {
       handleCloseMiniGame();
+      if (evaState === 'exterior') {
+        setEvaState('transitioning_in');
+      }
     }, 2000);
-  }, [handleCloseMiniGame]);
+  }, [handleCloseMiniGame, evaState, setEvaState]);
 
   return (
     <div style={{ 
@@ -269,6 +304,19 @@ export default function AstronautScreen() {
         sendBg="#00e5ff"
         sendText="#0a0e1a"
         onTypingChange={setChatTyping}
+      />
+
+      {/* EVA Blackout Transition Overlay */}
+      <div 
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: '#000',
+          zIndex: 80, // Below minigame but above everything else
+          pointerEvents: 'none',
+          opacity: (evaState === 'transitioning_out' || evaState === 'transitioning_in') ? 1 : 0,
+          transition: 'opacity 1.5s ease-in-out',
+        }} 
       />
     </div>
   );
